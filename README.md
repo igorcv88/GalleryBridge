@@ -8,7 +8,7 @@ O GalleryBridge analisa os arquivos ZIP do Google Takeout, identifica cópias id
 
 ## Estado do projeto
 
-A versão 0.3.1 está em teste. A análise dos ZIPs, a criação de cópias e a marcação local de favoritos foram exercitadas com arquivos sintéticos. A propagação de favoritos para o Google Fotos e a reprodução de Motion Photos na Samsung Gallery ainda precisam de validação em um Galaxy.
+A versão 0.4.1 está em teste. A análise dos ZIPs, a criação de cópias e a marcação local de favoritos foram exercitadas com arquivos sintéticos. A propagação de favoritos para o Google Fotos e a reprodução de Motion Photos na Samsung Gallery ainda precisam de validação em um Galaxy.
 
 > [!IMPORTANT]
 > A sincronização pode enviar a mídia inteira, mesmo quando uma duplicata não fica visível. Um lote de 20 GB pode consumir cerca de 20 GB de upload, ou mais se houver novas tentativas. Desative os dados móveis para a sincronização na Samsung Gallery e faça o primeiro piloto em Wi-Fi. As restrições de rede do GalleryBridge valem para o próprio app.
@@ -88,4 +88,11 @@ JPEG compatível pode ser recomposto. O GalleryBridge lê o formato Motion Photo
 
 Uma mídia sincronizada pode sumir do Google Fotos e de outros aparelhos quando for excluída. Use o caminho nativo da Galeria para itens na nuvem e preserve o item se houver dúvida sobre a associação. O app não trata a lixeira local como confirmação de exclusão na nuvem.
 
-Se quiser organizar os álbuns antigos separadamente, considere **Pictures/Arquivo**. Preserve **Restored** para downloads individuais e **Camera** para capturas. O feed reúne as mídias de várias pastas. Remover um álbum ainda preenchido pode remover as mídias que ele contém.
+Se você usa **DCIM/Archive** para o acervo consolidado, mantenha a organização separada da tela de revisão de duplicatas. Preserve **Restored** para downloads individuais e **Camera** para capturas. O feed reúne as mídias de várias pastas. Remover um álbum ainda preenchido pode remover as mídias que ele contém.
+
+
+## Sincronização, duplicatas e datas
+
+- Em **Avançado**, abra a Galeria para solicitar a sincronização nativa em Wi-Fi. Em perfis reconhecidos, o diagnóstico opcional mostra fila, tentativas agendadas, registros pendentes e o horário de sucesso observado. Para medir redução da fila ou comparar tentativas, faça uma segunda leitura depois de alguns minutos. Fila vazia e o fim do indicador de progresso não confirmam sincronização com o Google Fotos.
+- Em **Duplicatas**, selecione as fotos locais a comparar. O GalleryBridge forma grupos de JPEGs estáticos com bytes idênticos, mantém uma cópia por grupo e protege favoritos. O app mostra até 48 cópias por aprovação. Confirme as versões e os álbuns antes de pedir o movimento para **Pictures/GalleryBridge_Revisao_Duplicatas**. O Android precisa permitir a escrita. Se o app fechar durante o movimento, confira o diário antes de repetir a seleção. A revisão não apaga arquivos nem decide se eles foram excluídos do Google Fotos.
+- Em **Datas**, escolha uma foto. O app mostra a data do arquivo e a do Takeout quando encontra a mesma mídia por conteúdo. Para JPEGs compatíveis, digite a data com o fuso e verifique a prévia antes de salvar uma cópia corrigida. O original permanece acessível. HEIC, Motion Photos e estruturas EXIF que não podem ser verificadas ficam em revisão.

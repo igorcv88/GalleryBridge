@@ -38,6 +38,19 @@ class MainActivity : ComponentActivity() {
             model.compareLocal(uris)
         }
     }
+    private val duplicatePicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) model.previewDuplicates(uris.map(::keepReadGrant))
+    }
+    private val duplicateConsent = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        model.finishDuplicateMoves(result.resultCode == RESULT_OK)
+    }
+    private val datePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) model.previewDate(keepReadGrant(uri))
+    }
+    private val dateOutput = registerForActivityResult(ActivityResultContracts.CreateDocument("image/jpeg")) { uri ->
+        if (uri != null) model.exportDateCopy(uri)
+    }
+
     private val exportPicker = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) model.export(uri)
     }
@@ -82,6 +95,13 @@ class MainActivity : ComponentActivity() {
                     favorite = { item, desired -> model.prepareFavorite(item, desired, ::launchFavorite) },
                     favorites = { changes -> model.prepareFavorites(changes, ::launchFavorite) },
                     motion = { motionPicker.launch("GalleryBridge-Motion.jpg") },
+                    selectDuplicates = { duplicatePicker.launch(arrayOf("image/*")) },
+                    approveDuplicates = { request ->
+                        try { duplicateConsent.launch(IntentSenderRequest.Builder(request.intentSender).build()) }
+                        catch (_: RuntimeException) { model.finishDuplicateMoves(false) }
+                    },
+                    selectDate = { datePicker.launch(arrayOf("image/*")) },
+                    saveDate = { dateOutput.launch("GalleryBridge-data-revisada.jpg") },
                     motionActions = MotionActions(
                         { survivorPicker.launch(arrayOf("image/*")) },
                         { redundantPicker.launch(arrayOf("image/*", "video/*")) },
@@ -132,6 +152,8 @@ internal data class Actions(
     val pickZips: () -> Unit, val pickLocal: () -> Unit, val export: () -> Unit,
     val exportCatalog: () -> Unit, val openGallery: () -> Unit, val takeout: () -> Unit,
     val favorite: (Item, Boolean) -> Unit, val favorites: (List<FavoriteChange>) -> Unit, val motion: () -> Unit,
+    val selectDuplicates: () -> Unit, val approveDuplicates: (android.app.PendingIntent) -> Unit,
+    val selectDate: () -> Unit, val saveDate: () -> Unit,
     val motionActions: MotionActions
 )
 
@@ -141,6 +163,8 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
     private val favorites = FavoriteReconciliation(application, ledger)
     private val motion = MotionExport(application, ledger)
     private val motionNative = MotionNative(application, ledger, motion)
+    private val duplicates = DuplicateReview(application, ledger, motionNative)
+    private val dateRepair = DateRepair(application, ledger)
     private val device = Device(application)
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
@@ -192,6 +216,9 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
     var minimumBattery by mutableStateOf("25")
     var onlyCharging by mutableStateOf(false)
     var diagnostics by mutableStateOf(false)
+    var nativeHealth by mutableStateOf<SyncAssessment?>(null)
+        private set
+    private var previousSyncSample: SyncSample? = null
     var sdkDiagnostics by mutableStateOf<MediaSyncSnapshot?>(null)
         private set
     val galleryAvailable = runCatching {
@@ -514,6 +541,72 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    var duplicatePreview by mutableStateOf<DuplicatePreview?>(null)
+        private set
+    var duplicateSummary by mutableStateOf<Map<String, Int>>(emptyMap())
+        private set
+    private var deferredDuplicateResult: Boolean? = null
+
+    fun previewDuplicates(selected: List<Uri>) = run {
+        val result = duplicates.preview(selected, ::localCheckpoint)
+        var allowance = 48
+        val visible = result.groups.mapNotNull { group ->
+            val targets = group.candidates.take(allowance)
+            allowance -= targets.size
+            group.copy(candidates = targets).takeIf { targets.isNotEmpty() }
+        }
+        handler.post { duplicatePreview = DuplicatePreview(visible, result.held) }
+        "${result.candidates.size} redundantes exatos na seleção. Até 48 por aprovação."
+    }
+
+    fun requestDuplicateMoves(plan: DuplicatePreview, launch: (android.app.PendingIntent) -> Unit) = run {
+        val request = duplicates.request(plan, ::localCheckpoint)
+        handler.post { duplicatePreview = null; launch(request) }
+        null
+    }
+
+    fun finishDuplicateMoves(approved: Boolean?) {
+        if (busy) {
+            if (approved != null) deferredDuplicateResult = approved
+            return
+        }
+        withSettings { settings ->
+            try {
+                val checkpoint = if (approved == true) gate(settings)::check else ::localCheckpoint
+                duplicates.finish(approved, checkpoint)
+                "Verificação local concluída. Efeito remoto desconhecido."
+            } finally {
+                val summary = ledger.duplicateJobs().groupingBy { it.state }.eachCount()
+                handler.post { duplicateSummary = summary }
+            }
+        }
+    }
+
+    var datePreview by mutableStateOf<DateReview?>(null)
+        private set
+    var dateProposal by mutableStateOf<DateCopyPlan?>(null)
+        private set
+
+    fun previewDate(uri: Uri) = run {
+        val result = dateRepair.preview(uri, ::localCheckpoint)
+        handler.post { datePreview = result; dateProposal = null }
+        null
+    }
+
+    fun proposeDate(input: String) = run {
+        val source = datePreview ?: throw BridgeFailure(Reason.NEEDS_USER_ACTION)
+        val plan = dateRepair.plan(source, input, ::localCheckpoint)
+        handler.post { dateProposal = plan }
+        "Prévia verificada. Escolha onde salvar a cópia."
+    }
+
+    fun exportDateCopy(destination: Uri) = run {
+        val plan = dateProposal ?: throw BridgeFailure(Reason.NEEDS_USER_ACTION)
+        dateRepair.export(plan, destination, ::localCheckpoint)
+        handler.post { dateProposal = null }
+        "Cópia verificada. O original permanece intacto. O estado na nuvem continua desconhecido."
+    }
+
     fun previewFavorites() = run {
         if (android.os.Build.VERSION.SDK_INT < 30) return@run "Favoritos locais precisam do Android 11 ou posterior."
         val entries = favorites.preview(::localCheckpoint)
@@ -617,12 +710,17 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
 
     fun readSdkDiagnostics() = run {
         val result = MediaSyncDiagnostics(getApplication()).read()
-        handler.post { sdkDiagnostics = result }
+        val sample = result.sample
+        val assessment = sample?.let { assessSync(previousSyncSample, it) }
+        previousSyncSample = sample
+        handler.post { sdkDiagnostics = result; nativeHealth = assessment }
         result.status
     }
 
     fun export(uri: Uri) = run {
         val report = ledger.summary().put("observed_at", java.time.Instant.now().toString())
+        val moves = ledger.duplicateJobs().groupingBy { it.state }.eachCount()
+        if (moves.isNotEmpty()) report.put("duplicate_review", JSONObject(moves)).put("duplicate_remote_verified", false)
         ledger.motionOperation()?.let { op ->
             report.put("motion_review", JSONObject().put("plan_digest", op.digest).put("state", op.state)
                 .put("remote_server_verified", false).put("delete_authorized", false))
@@ -635,7 +733,10 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
         if (diagnostics) sdkDiagnostics?.let {
             report.put("sdk_aggregate_evidence", JSONObject().put("association_signals", it.associated)
                 .put("commit_count", it.queue).put("commits_with_retry", it.retried)
-                .put("backup_rows", it.backup))
+                .put("backup_rows", it.backup).put("health", nativeHealth?.health?.name)
+                .put("commits_per_minute", nativeHealth?.commitsPerMinute)
+                .put("dirty_rows", it.sample?.dirty).put("scheduled_commits", it.sample?.future)
+                .put("observed_success_ms", it.sample?.lastSuccess))
         }
         val destination = getApplication<Application>().contentResolver.openOutputStream(uri, "wt")
             ?: throw BridgeFailure(Reason.NEEDS_USER_ACTION)
@@ -712,6 +813,10 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
                 deferredMotionResult?.let {
                     deferredMotionResult = null
                     finishMotionOperation(it)
+                }
+                deferredDuplicateResult?.let {
+                    deferredDuplicateResult = null
+                    finishDuplicateMoves(it)
                 }
                 deferredFavoriteResult?.let {
                     deferredFavoriteResult = null

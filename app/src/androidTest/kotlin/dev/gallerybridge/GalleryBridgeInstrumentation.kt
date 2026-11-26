@@ -21,7 +21,9 @@ class GalleryBridgeInstrumentation : Instrumentation() {
             "corruptSelectedMemberCannotPublishAndResumesWithOneReceipt" to fixtures::corruptSelectedMemberCannotPublishAndResumesWithOneReceipt,
             "localRematchAfterNativeRestoreDoesNotRestage" to fixtures::localRematchAfterNativeRestoreDoesNotRestage,
             "derivativesAndHistoricalFavorites" to fixtures::derivativesAndHistoricalFavorites,
-            "motionRecomposeReviewTrashAndRestore" to fixtures::motionRecomposeReviewTrashAndRestore
+            "motionRecomposeReviewAndReconcileSyntheticTrash" to fixtures::motionRecomposeReviewAndReconcileSyntheticTrash,
+            "duplicateReviewJournalMovesOnlySelectedCopy" to fixtures::duplicateReviewJournalMovesOnlySelectedCopy,
+            "dateCopyPreservesTheOriginalAndDoesNotOverwriteDestination" to fixtures::dateCopyPreservesTheOriginalAndDoesNotOverwriteDestination
         ).filter { selectedTest == null || it.first == selectedTest }
         check(tests.isNotEmpty()) { "Unknown instrumentation test: $selectedTest" }
         var failures = 0

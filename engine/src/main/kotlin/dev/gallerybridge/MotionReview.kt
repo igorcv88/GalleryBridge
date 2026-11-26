@@ -28,5 +28,7 @@ fun reconcileMotion(
     }
 }
 
-fun motionDigest(vararg fields: String): String =
+fun motionDigest(vararg fields: String): String = motionDigest(fields.asList())
+
+fun motionDigest(fields: List<String>): String =
     digest(fields.joinToString("") { "${it.length}:$it" }.byteInputStream()).sha

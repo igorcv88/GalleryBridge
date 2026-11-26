@@ -89,7 +89,7 @@ internal class ImportTest(private val context: Context, private val instrumentat
                 assertEquals(7L, it.sources().single().id)
                 assertEquals("VERIFIED", it.sources().single().state)
                 assertTrue(it.pendingFavorites().isEmpty())
-                assertEquals(4, it.readableDatabase.version)
+                assertEquals(5, it.readableDatabase.version)
             }
         } finally {
             context.deleteDatabase(name)
@@ -314,14 +314,13 @@ internal class ImportTest(private val context: Context, private val instrumentat
         error("Platform favorite consent did not update the fixture")
     }
 
-    fun motionRecomposeReviewTrashAndRestore() {
+    fun motionRecomposeReviewAndReconcileSyntheticTrash() {
         val db = "motion-${UUID.randomUUID()}.db"
         val zip = File(context.cacheDir, "$db.zip")
         instrumentation.context.assets.open("motion-test.zip").use { input ->
             zip.outputStream().use { input.copyTo(it) }
         }
         val created = mutableListOf<Uri>()
-        var activity: MainActivity? = null
         var staged: File? = null
         try {
             Ledger(context, db).use { ledger ->
@@ -379,26 +378,122 @@ internal class ImportTest(private val context: Context, private val instrumentat
                 native.requestTrash(fresh, consent, 0, {})
                 assertEquals("CANCELLED", native.finish(false, {})?.state)
                 assertEquals(0, trashFlag(still))
-                activity = instrumentation.startActivitySync(android.content.Intent(context, MainActivity::class.java)
-                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
-                val active = requireNotNull(activity)
-                val trash = native.requestTrash(fresh, consent, 0, {})
-                instrumentation.runOnMainSync { active.startIntentSenderForResult(trash.intentSender, 91, null, 0, 0, 0) }
-                waitForTrashFlag(still, 1)
+                // Consent completion alone is not evidence that the provider changed the item.
+                native.requestTrash(fresh, consent, 0, {})
+                assertEquals("NOT_OBSERVED", native.finish(true, {})?.state)
+                native.requestTrash(fresh, consent, 0, {})
+                // Only this synthetic owned row is updated directly to exercise the journal readback.
+                // This does not certify interaction with the platform consent dialog.
+                assertEquals(1, resolver.update(still, values(MediaStore.MediaColumns.IS_TRASHED to 1), null, null))
                 assertEquals("REMOVAL_OBSERVED", native.finish(true, {})?.state)
                 assertEquals(0, trashFlag(winner))
-                val restore = native.requestRestore {}
-                instrumentation.runOnMainSync { active.startIntentSenderForResult(restore.intentSender, 92, null, 0, 0, 0) }
-                waitForTrashFlag(still, 0)
+                native.requestRestore {}
+                val includeTrashed = android.os.Bundle().apply {
+                    putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_INCLUDE)
+                }
+                assertEquals(1, resolver.update(still, values(MediaStore.MediaColumns.IS_TRASHED to 0), includeTrashed))
                 assertEquals("RESTORED_LOCAL", native.finish(true, {})?.state)
                 assertEquals(photo.sha, native.compare(winner, still, {}).candidate.sha)
             }
         } finally {
-            activity?.let { instrumentation.runOnMainSync(it::finish) }
             created.forEach { context.contentResolver.delete(it, null, null) }
             staged?.delete()
             zip.delete()
             context.deleteDatabase(db)
+        }
+    }
+
+    @android.annotation.TargetApi(30)
+    fun duplicateReviewJournalMovesOnlySelectedCopy() {
+        val db = "dup-${UUID.randomUUID()}.db"
+        val resolver = context.contentResolver
+        val pictures = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val added = mutableListOf<Uri>()
+        val zip = File(context.cacheDir, "$db.zip")
+        instrumentation.context.assets.open("motion-test.zip").use { input ->
+            zip.outputStream().use { input.copyTo(it) }
+        }
+        try {
+            Ledger(context, db).use { ledger ->
+                val media = MotionNative(context, ledger, MotionExport(context, ledger))
+                val duplicates = DuplicateReview(context, ledger, media)
+                val source = java.util.zip.ZipFile(zip).use { files ->
+                    files.getInputStream(files.getEntry("Takeout/fixture/still.jpg")).use { it.readBytes() }
+                }
+                repeat(2) { index ->
+                    val uri = requireNotNull(resolver.insert(pictures, values(
+                        MediaStore.MediaColumns.DISPLAY_NAME to "$db-$index.jpg",
+                        MediaStore.MediaColumns.MIME_TYPE to "image/jpeg",
+                        MediaStore.MediaColumns.RELATIVE_PATH to "Pictures/GalleryBridge_Fixture/",
+                        MediaStore.MediaColumns.IS_PENDING to 1
+                    ))).also(added::add)
+                    requireNotNull(resolver.openOutputStream(uri)).use { it.write(source) }
+                    resolver.update(uri, values(MediaStore.MediaColumns.IS_PENDING to 0), null, null)
+                }
+                val plan = duplicates.preview(added, {})
+                assertEquals(1, plan.candidates.size)
+                assertTrue(ledger.duplicateJobs().isEmpty())
+                duplicates.request(plan) {}
+                duplicates.finish(false) {}
+                assertEquals("CANCELLED", ledger.duplicateJobs().single().state)
+                assertEquals("Pictures/GalleryBridge_Fixture/", media.snapshot(plan.candidates.single().uri, false, {}).path)
+                duplicates.request(plan) {}
+                // The fixture is owned by this app. This checks the executor and MediaStore round trip.
+                duplicates.finish(true) {}
+                assertEquals("MOVED_LOCAL", ledger.duplicateJobs().single().state)
+                assertEquals(DUPLICATE_DESTINATION, media.snapshot(plan.candidates.single().uri, false, {}).path)
+                assertEquals(plan.groups.single().keeper, media.snapshot(plan.groups.single().keeper.uri, false, {}))
+            }
+        } finally {
+            added.forEach { resolver.delete(it, null, null) }
+            zip.delete()
+            context.deleteDatabase(db)
+        }
+    }
+
+    fun dateCopyPreservesTheOriginalAndDoesNotOverwriteDestination() {
+        val directory = File(context.cacheDir, "date-${UUID.randomUUID()}").apply { mkdirs() }
+        val jpeg = File(directory, "wrong.jpg")
+        val output = File(directory, "new.jpg").apply { createNewFile() }
+        val nonempty = File(directory, "existing.jpg").apply { writeText("kept") }
+        val path = "${directory.name}.db"
+        val image = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888)
+        val encoded = ByteArrayOutputStream().use { bytes ->
+            image.compress(Bitmap.CompressFormat.JPEG, 86, bytes)
+            image.recycle()
+            bytes.toByteArray()
+        }
+        val tiff = java.nio.ByteBuffer.allocate(95).apply {
+            put("MM".toByteArray()).putShort(42).putInt(8)
+            putShort(1).putShort(0x8769.toShort()).putShort(4).putInt(1).putInt(26).putInt(0)
+            putShort(3)
+            putShort(0x9003.toShort()).putShort(2).putInt(20).putInt(68)
+            putShort(0x9011.toShort()).putShort(2).putInt(7).putInt(88)
+            putShort(0x9291.toShort()).putShort(2).putInt(4).put("127\u0000".toByteArray())
+            putInt(0)
+            put("1971:11:28 18:39:09\u0000+00:00\u0000".toByteArray())
+        }.array()
+        val prefix = byteArrayOf(-1, -40, -1, -31, 0, 103, 69, 120, 105, 102, 0, 0)
+        val original = prefix + tiff + encoded.copyOfRange(2, encoded.size)
+        jpeg.writeBytes(original)
+        try {
+            Ledger(context, path).use { ledger ->
+                val repair = DateRepair(context, ledger)
+                val review = repair.preview(Uri.fromFile(jpeg)) {}
+                val target = "2020-10-11T15:39:09.127-03:00"
+                assertTrue(review.original.startsWith("1971"))
+                val approved = repair.plan(review, target) {}
+                assertTrue(runCatching { repair.export(approved, Uri.fromFile(nonempty)) {} }.isFailure)
+                repair.export(approved, Uri.fromFile(output)) {}
+                assertEquals("kept", nonempty.readText())
+                assertTrue(original.contentEquals(jpeg.readBytes()))
+                val corrected = androidx.exifinterface.media.ExifInterface(output)
+                assertEquals("2020:10:11 15:39:09", corrected.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME_ORIGINAL))
+                assertEquals("-03:00", corrected.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_OFFSET_TIME_ORIGINAL))
+            }
+        } finally {
+            directory.deleteRecursively()
+            context.deleteDatabase(path)
         }
     }
 
@@ -409,36 +504,6 @@ internal class ImportTest(private val context: Context, private val instrumentat
         }
         return context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.IS_TRASHED), args, null)
             ?.use { if (it.moveToFirst()) it.getInt(0) else null }
-    }
-
-    private fun waitForTrashFlag(uri: Uri, expected: Int) {
-        val automation = instrumentation.uiAutomation
-        automation.serviceInfo = automation.serviceInfo.apply {
-            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-                android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-        }
-        val observed = linkedSetOf<String>()
-        val deadline = android.os.SystemClock.elapsedRealtime() + 50_000
-        while (android.os.SystemClock.elapsedRealtime() < deadline) {
-            if (trashFlag(uri) == expected) return
-            val roots = listOfNotNull(automation.rootInActiveWindow) + automation.windows.mapNotNull { it.root }
-            for (root in roots) {
-                val owner = root.packageName?.toString()
-                observed.add(owner.orEmpty())
-                if (owner?.contains("providers.media") == true) {
-                    describeButtons(root, observed)
-                    if (approve(root)) break
-                }
-            }
-            Thread.sleep(500)
-        }
-        error("Expected trash flag $expected; actual ${trashFlag(uri)}; windows and buttons: $observed")
-    }
-
-    private fun describeButtons(node: android.view.accessibility.AccessibilityNodeInfo?, labels: MutableSet<String>) {
-        if (node == null) return
-        if (node.isClickable) labels.add("${node.viewIdResourceName} ${node.text}")
-        repeat(node.childCount) { describeButtons(node.getChild(it), labels) }
     }
 
     private fun approve(node: android.view.accessibility.AccessibilityNodeInfo?): Boolean {

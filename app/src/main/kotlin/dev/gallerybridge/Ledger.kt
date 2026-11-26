@@ -29,7 +29,7 @@ private val favoriteSidecars = """
 """.trimIndent()
 
 internal class Ledger(context: Context, name: String = "gallerybridge.db") : SQLiteOpenHelper(
-    context, name, null, 4
+    context, name, null, 5
 ) {
     init { setWriteAheadLoggingEnabled(true) }
 
@@ -70,13 +70,43 @@ internal class Ledger(context: Context, name: String = "gallerybridge.db") : SQL
         createReconciliationTables(db)
         createFavoriteEvidence(db)
         createMotionTables(db)
+        createDuplicateTables(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        require(oldVersion in 1..3 && newVersion == 4)
+        require(oldVersion in 1..4 && newVersion == 5)
         if (oldVersion == 1) createReconciliationTables(db)
         if (oldVersion <= 2) createFavoriteEvidence(db)
-        createMotionTables(db)
+        if (oldVersion <= 3) createMotionTables(db)
+        createDuplicateTables(db)
+    }
+
+    private fun createDuplicateTables(db: SQLiteDatabase) {
+        db.execSQL("""CREATE TABLE duplicate_operation(
+            uri TEXT PRIMARY KEY, plan TEXT NOT NULL, keeper TEXT NOT NULL, candidate TEXT NOT NULL,
+            state TEXT NOT NULL
+        )""".trimIndent())
+    }
+
+    fun duplicateJobs(): List<DuplicateJob> = readableDatabase.rawQuery(
+        "SELECT uri,plan,keeper,candidate,state FROM duplicate_operation ORDER BY uri", null
+    ).use { rows ->
+        buildList {
+            while (rows.moveToNext()) add(DuplicateJob(rows.getString(0), rows.getString(1), rows.getString(2),
+                rows.getString(3), rows.getString(4)))
+        }
+    }
+
+    fun saveDuplicateJobs(items: List<DuplicateJob>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            items.forEach { job ->
+                db.execSQL("INSERT OR REPLACE INTO duplicate_operation VALUES(?,?,?,?,?)",
+                    arrayOf(job.uri, job.plan, job.keeper, job.candidate, job.state))
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
     }
 
     private fun createMotionTables(db: SQLiteDatabase) {

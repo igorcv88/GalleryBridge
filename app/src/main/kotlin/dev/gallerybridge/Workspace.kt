@@ -37,7 +37,7 @@ import java.time.Instant
 import java.util.Locale
 import org.json.JSONObject
 
-private enum class Screen(val label: String) { SOURCES("Origem"), BATCH("Lotes"), METADATA("Metadados"), MOTION("Motion Photos"), REPORT("Relatório"), DIAGNOSTICS("Avançado") }
+private enum class Screen(val label: String) { SOURCES("Origem"), BATCH("Lotes"), METADATA("Metadados"), MOTION("Motion Photos"), DUPLICATES("Duplicatas"), DATES("Datas"), REPORT("Relatório"), DIAGNOSTICS("Avançado") }
 
 @Composable
 internal fun Workspace(model: BridgeModel, actions: Actions) {
@@ -154,6 +154,8 @@ internal fun Workspace(model: BridgeModel, actions: Actions) {
                         }
                     }
                     Screen.MOTION -> motionScreen(model, actions)
+                    Screen.DUPLICATES -> item { DuplicateScreen(model, actions) }
+                    Screen.DATES -> item { DatesScreen(model, actions) }
                     Screen.REPORT -> item {
                         Text("Evidência local e pendências", style = MaterialTheme.typography.titleLarge)
                         Text("${summary.optLong("media_store_receipts")} recibos locais · ${summary.optLong("local_absence_unknown")} ausências em revisão")
@@ -176,13 +178,36 @@ internal fun Workspace(model: BridgeModel, actions: Actions) {
                                 Text("Wi-Fi não tarifada: ${if (it.wifi) "sim" else "não"} · bateria ${it.battery ?: "?"}% · térmico ${it.thermal} · margem ${it.headroom ?: "indisponível"}")
                                 Text("Espaço livre ${formatGiB(it.free)} · UID do assistente RX ${it.helperRx ?: "indisponível"}, TX ${it.helperTx ?: "indisponível"} bytes.")
                             }
-                            Text("Estado nativo e causa de TRANSIENT_ERROR · UNKNOWN. Contadores do provedor Drive e da Samsung não são acessíveis neste modo.")
+                            Text("O status da Galeria e os sinais do agente são medidos separadamente. Solicite a sincronização pela Galeria em Wi-Fi; os contadores não confirmam a nuvem.")
                             OutlinedButton(onClick = { rootConsent = true }, enabled = !model.busy) {
                                 Text("Ler contadores avançados do MediaSync")
                             }
                             model.sdkDiagnostics?.let {
                                 Text(it.status)
+                                it.sample?.let { sample ->
+                                    val health = model.nativeHealth?.health ?: SyncHealth.UNKNOWN
+                                    Text(when (health) {
+                                        SyncHealth.ACTIVE_DRAINING -> "A fila está diminuindo."
+                                        SyncHealth.BACKOFF_SCHEDULED -> "Próximas tentativas agendadas."
+                                        SyncHealth.TRANSIENT_PAUSE -> "O agente informou pausa por erro transitório."
+                                        SyncHealth.STALLED_RETRY -> "Os mesmos commits continuam em nova tentativa."
+                                        SyncHealth.RECONCILING -> "Há trabalho a reconciliar. Sucesso ainda não observado."
+                                        SyncHealth.COMPLETED_OBSERVED -> "Ciclo concluído. Avanço do último sucesso não confirmado."
+                                        SyncHealth.LAST_SUCCESS_ADVANCED -> "O horário do último sucesso avançou após o ciclo."
+                                        SyncHealth.UNKNOWN -> "Sem sinais suficientes para afirmar o estado."
+                                    })
+                                    Text("Agendados: ${sample.future} · Registros dirty: ${sample.dirty}")
+                                    sample.lastSuccess?.let { time ->
+                                        Text("Último sucesso observado: " + java.text.DateFormat.getDateTimeInstance().format(java.util.Date(time)))
+                                    }
+                                    model.nativeHealth?.commitsPerMinute?.let { rate ->
+                                        Text("Redução observada: ${rate.toInt()} commits por minuto.")
+                                    }
+                                }
                                 if (it.associated != null) Text("Associações sinalizadas: ${it.associated} · fila: ${it.queue} · tentativas: ${it.retried} · registros de backup: ${it.backup}.")
+                            }
+                            OutlinedButton(onClick = actions.openGallery, enabled = !model.busy && model.galleryAvailable) {
+                                Text("Abrir Galeria para sincronizar")
                             }
                             model.providerVersions.forEach { Text("${it.first} · ${it.second ?: "indisponível"}") }
                             TextButton(onClick = { model.refresh() }, enabled = !model.busy) { Text("Atualizar indicadores") }

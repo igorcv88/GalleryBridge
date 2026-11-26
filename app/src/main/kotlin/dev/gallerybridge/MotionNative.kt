@@ -18,7 +18,8 @@ internal data class MotionLocal(
     fun fingerprint(): String = motionDigest(uri.toString(), sha, bytes.toString(), name, path,
         date.toString(), favorite.toString(), trashed.toString(), generation.toString(), owner.orEmpty())
     fun journal(): String = JSONObject().put("uri", uri.toString()).put("sha", sha)
-        .put("bytes", bytes).put("path", path).put("name", name).toString()
+        .put("bytes", bytes).put("path", path).put("name", name)
+        .put("fingerprint", fingerprint()).toString()
 }
 
 internal data class MotionOperation(
@@ -147,7 +148,7 @@ internal class MotionNative(private val context: Context, private val ledger: Le
         } ?: throw BridgeFailure(Reason.NEEDS_USER_ACTION)
     }
 
-    private fun snapshot(uri: Uri, trashed: Boolean, check: () -> Unit): MotionLocal {
+    fun snapshot(uri: Uri, trashed: Boolean, check: () -> Unit): MotionLocal {
         val before = read(uri, trashed)
         demand(!before.pending && before.trashed == trashed && before.bytes in 1..MAX_MOTION_BYTES, Reason.DESTINATION_REVIEW)
         val stream = resolver.openInputStream(uri) ?: throw BridgeFailure(Reason.NEEDS_USER_ACTION)
@@ -263,15 +264,29 @@ internal class MotionNative(private val context: Context, private val ledger: Le
         return applyMove(rollback, item.uri, originalPath, check)
     }
 
-    private fun requireFreeDestination(item: MotionLocal, path: String) {
+    fun requireFreeDestination(item: MotionLocal, path: String) {
         val collection = item.uri.buildUpon().path(item.uri.path.orEmpty().substringBeforeLast('/')).build()
         val args = inclusion().apply {
             putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION,
-                "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND ${MediaStore.MediaColumns.DISPLAY_NAME}=?")
-            putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, arrayOf(path, item.name))
+                "${MediaStore.MediaColumns.RELATIVE_PATH}=?")
+            putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, arrayOf(path))
         }
-        demand(resolver.query(collection, arrayOf(MediaStore.MediaColumns._ID), args, null)
-            ?.use { !it.moveToFirst() } == true, Reason.DESTINATION_REVIEW)
+        val free = resolver.query(collection, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), args, null)?.use { rows ->
+            var conflict = false
+            while (!conflict && rows.moveToNext()) conflict = rows.getString(0).equals(item.name, ignoreCase = true)
+            !conflict
+        }
+        demand(free == true, Reason.DESTINATION_REVIEW)
+    }
+
+    @TargetApi(30)
+    fun moveReviewedImage(item: MotionLocal, path: String): Int {
+        val where = "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND ${MediaStore.MediaColumns.DISPLAY_NAME}=? AND " +
+            "${MediaStore.MediaColumns.SIZE}=? AND ${MediaStore.MediaColumns.GENERATION_MODIFIED}=? AND " +
+            "${MediaStore.MediaColumns.IS_PENDING}=0 AND ${MediaStore.MediaColumns.IS_TRASHED}=0 AND " +
+            "${MediaStore.MediaColumns.IS_FAVORITE}=0"
+        return resolver.update(item.uri, values(MediaStore.MediaColumns.RELATIVE_PATH to path), where,
+            arrayOf(item.path, item.name, item.bytes.toString(), item.generation.toString()))
     }
 
     private fun applyMove(op: MotionOperation, uri: Uri, path: String, check: () -> Unit): MotionOperation {
