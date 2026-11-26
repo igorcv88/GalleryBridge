@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/gallerybridge/batch-state.schema.json",
+  "title": "GalleryBridgeBatch",
+  "type": "object",
+  "required": ["batch_id", "state", "expected", "staged", "linked_clean", "unresolved", "free_space_bytes", "external_queue_count", "current_or_unknown_queue_count"],
+  "properties": {
+    "batch_id": {"type": "integer", "minimum": 0},
+    "state": {"enum": ["PLANNED", "STAGING", "READY_FOR_GALLERY", "WAITING_NATIVE_SYNC", "VERIFYING", "READY_FOR_USER_FREE_UP", "CONFIRMED", "CONFIRMED_PARTIAL", "REVIEW_REQUIRED", "FAILED", "PAUSED"]},
+    "expected": {"type": "integer", "minimum": 0},
+    "staged": {"type": "integer", "minimum": 0},
+    "linked_clean": {"type": "integer", "minimum": 0},
+    "unresolved": {"type": "integer", "minimum": 0},
+    "free_space_bytes": {"type": "integer", "minimum": 0},
+    "external_queue_count": {"type": "integer", "minimum": 0},
+    "current_or_unknown_queue_count": {"type": "integer", "minimum": 0},
+    "reason_codes": {"type": "array", "items": {"type": "string"}},
+    "last_observation": {"type": ["string", "null"], "format": "date-time"},
+    "is_independently_cloud_verified": {"type": "boolean", "default": false}
+  }
+}

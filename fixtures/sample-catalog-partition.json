@@ -1,0 +1,32 @@
+{
+  "fixture": "synthetic-case-based-counts-no-user-media",
+  "catalog_total": 49045,
+  "confirmed_after_batch005": 45689,
+  "unresolved": 10,
+  "held_remaining_arithmetic": 3345,
+  "user_excluded": 1,
+  "historical_holds_before_date_pilot": {
+    "missing_time": 2302,
+    "time_conflict": 14,
+    "nonannual_review": 73,
+    "already_local": 822,
+    "format_review": 169,
+    "archive_overlap": 5
+  },
+  "date_pilot": {
+    "batch_id": 5,
+    "count": 40,
+    "link_clean": 40,
+    "keys_mp4_before": 1412,
+    "keys_mp4_remaining": 1372,
+    "date_diff_le_2s": 25,
+    "date_diff_3_to_26s": 13,
+    "date_diff_265s": 1,
+    "date_diff_102749s": 1
+  },
+  "notes": [
+    "counts for a synthetic test use real aggregate numbers only; no personal media",
+    "historical_holds should not be added again to date-pilot confirmed",
+    "E2 linked clean is not E4 independent cloud verification"
+  ]
+}
