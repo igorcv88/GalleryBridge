@@ -547,7 +547,13 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
         private set
     private var deferredDuplicateResult: Boolean? = null
 
-    fun previewDuplicates(selected: List<Uri>) = run {
+    fun previewDuplicates(selected: List<Uri>) = run { reviewDuplicates(selected) }
+
+    fun previewCatalogDuplicates() = run {
+        reviewDuplicates(ledger.duplicateCatalogTargets().map(Uri::parse))
+    }
+
+    private fun reviewDuplicates(selected: List<Uri>): String {
         val result = duplicates.preview(selected, ::localCheckpoint)
         var allowance = 48
         val visible = result.groups.mapNotNull { group ->
@@ -556,7 +562,7 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
             group.copy(candidates = targets).takeIf { targets.isNotEmpty() }
         }
         handler.post { duplicatePreview = DuplicatePreview(visible, result.held) }
-        "${result.candidates.size} redundantes exatos na seleção. Até 48 por aprovação."
+        return "${result.candidates.size} redundantes exatos na seleção. Até 48 por aprovação."
     }
 
     fun requestDuplicateMoves(plan: DuplicatePreview, launch: (android.app.PendingIntent) -> Unit) = run {
@@ -655,6 +661,7 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
     }
 
     private var nextLocalSample = 0L
+    @Synchronized
     private fun localCheckpoint() {
         demand(!pauseRequested, Reason.PAUSED)
         val now = android.os.SystemClock.elapsedRealtime()

@@ -430,7 +430,12 @@ internal class ImportTest(private val context: Context, private val instrumentat
                     requireNotNull(resolver.openOutputStream(uri)).use { it.write(source) }
                     resolver.update(uri, values(MediaStore.MediaColumns.IS_PENDING to 0), null, null)
                 }
-                val plan = duplicates.preview(added, {})
+                ledger.addSource(Uri.fromFile(zip).toString())
+                Work(context, ledger).ingest(0, {})
+                val sha = source.inputStream().use { digest(it).sha }
+                added.forEach { ledger.localTarget(sha, it.toString()) }
+                assertEquals(added.toSet(), ledger.duplicateCatalogTargets().map(Uri::parse).toSet())
+                val plan = duplicates.preview(ledger.duplicateCatalogTargets().map(Uri::parse), {})
                 assertEquals(1, plan.candidates.size)
                 assertTrue(ledger.duplicateJobs().isEmpty())
                 duplicates.request(plan) {}
@@ -441,6 +446,8 @@ internal class ImportTest(private val context: Context, private val instrumentat
                 // The fixture is owned by this app. This checks the executor and MediaStore round trip.
                 duplicates.finish(true) {}
                 assertEquals("MOVED_LOCAL", ledger.duplicateJobs().single().state)
+                assertTrue(ledger.duplicateCatalogTargets().isEmpty())
+                assertTrue(duplicates.preview(added, {}).candidates.isEmpty())
                 assertEquals(DUPLICATE_DESTINATION, media.snapshot(plan.candidates.single().uri, false, {}).path)
                 assertEquals(plan.groups.single().keeper, media.snapshot(plan.groups.single().keeper.uri, false, {}))
             }

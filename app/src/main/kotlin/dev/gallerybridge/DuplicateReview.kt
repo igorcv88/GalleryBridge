@@ -7,6 +7,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
 import org.json.JSONObject
 
 internal const val DUPLICATE_DESTINATION = "Pictures/GalleryBridge_Revisao_Duplicatas/"
@@ -23,25 +25,15 @@ internal data class DuplicatePreview(val groups: List<LocalDuplicateGroup>, val 
 internal class DuplicateReview(private val context: Context, private val ledger: Ledger, private val media: MotionNative) {
     fun preview(documents: List<Uri>, check: () -> Unit): DuplicatePreview {
         demand(Build.VERSION.SDK_INT >= 30, Reason.UNSUPPORTED)
-        demand(documents.size in 1..1000, Reason.DESTINATION_REVIEW)
+        demand(documents.size <= 1000, Reason.DESTINATION_REVIEW)
         var held = 0
         val available = linkedMapOf<String, MotionLocal>()
         val paths = mutableSetOf<String>()
-        for (document in documents.distinct()) {
-            check()
-            val row = try {
-                exactJpeg(document, check)
-            } catch (failure: BridgeFailure) {
-                if (failure.reason in setOf(Reason.PAUSED, Reason.THERMAL)) throw failure
-                null
-            } catch (_: java.io.IOException) {
-                null
-            } catch (_: SecurityException) {
-                null
-            } catch (_: IllegalArgumentException) {
-                null
+        for (row in readCandidates(documents.distinct(), check)) {
+            if (row == null || row.path == DUPLICATE_DESTINATION) {
+                held++
+                continue
             }
-            if (row == null) { held++; continue }
             val key = row.uri.toString()
             if (key in available) continue
             val path = row.uri.pathSegments.first() + ":" + row.path + row.name
@@ -50,13 +42,47 @@ internal class DuplicateReview(private val context: Context, private val ledger:
         }
         val groups = exactDuplicateGroups(available.map { (key, row) ->
             DuplicateFile(key, row.sha, row.bytes,
-                row.favorite != false || row.path == DUPLICATE_DESTINATION ||
-                    ledger.protectedMotionSurvivor(key, row.sha),
+                row.favorite != false || ledger.protectedMotionSurvivor(key, row.sha),
                 row.date)
         }).map { group ->
             LocalDuplicateGroup(available.getValue(group.keeper.id), group.candidates.map { available.getValue(it.id) })
         }
         return DuplicatePreview(groups, held)
+    }
+
+    private fun readCandidates(documents: List<Uri>, check: () -> Unit): List<MotionLocal?> {
+        if (documents.isEmpty()) return emptyList()
+        val readers = Executors.newFixedThreadPool(minOf(2, documents.size))
+        try {
+            return documents.chunked(48).flatMap { wave ->
+                check()
+                wave.map { document ->
+                    readers.submit<MotionLocal?> { inspectCandidate(document, check) }
+                }.map { result ->
+                    try {
+                        result.get()
+                    } catch (error: ExecutionException) {
+                        throw error.cause ?: error
+                    }
+                }
+            }
+        } finally {
+            readers.shutdownNow()
+        }
+    }
+
+    private fun inspectCandidate(document: Uri, check: () -> Unit): MotionLocal? = try {
+        check()
+        exactJpeg(document, check)
+    } catch (failure: BridgeFailure) {
+        if (failure.reason == Reason.PAUSED || failure.reason == Reason.THERMAL) throw failure
+        null
+    } catch (_: java.io.IOException) {
+        null
+    } catch (_: SecurityException) {
+        null
+    } catch (_: IllegalArgumentException) {
+        null
     }
 
     private fun exactJpeg(document: Uri, check: () -> Unit): MotionLocal {
@@ -83,6 +109,8 @@ internal class DuplicateReview(private val context: Context, private val ledger:
         demand(Build.VERSION.SDK_INT >= 30 && plan.candidates.size in 1..48 &&
             ledger.duplicateJobs().none { it.state in pending }, Reason.DESTINATION_REVIEW)
         val recorded = ledger.duplicateJobs()
+        val names = plan.candidates.map { it.name.lowercase(java.util.Locale.ROOT) }
+        demand(names.distinct().size == names.size, Reason.DESTINATION_REVIEW)
         val targets = plan.candidates.map { it.uri.toString() }.toSet()
         demand(targets.size == plan.candidates.size && plan.groups.none { it.keeper.uri.toString() in targets } &&
             recorded.none { it.state == "MOVED_LOCAL" && JSONObject(it.keeper).getString("uri") in targets },
@@ -144,7 +172,8 @@ internal class DuplicateReview(private val context: Context, private val ledger:
         readExpected(job.keeper, check)
         val row = media.snapshot(Uri.parse(job.uri), false, check)
         val prior = JSONObject(job.candidate)
-        return row.path == DUPLICATE_DESTINATION && row.name == prior.getString("name") &&
+        val expectedDate = if (prior.has("date")) prior.getLong("date") else null
+        return row.date == expectedDate && row.path == DUPLICATE_DESTINATION && row.name == prior.getString("name") &&
             row.sha == prior.getString("sha") && row.bytes == prior.getLong("bytes") && row.favorite == false
     }
 

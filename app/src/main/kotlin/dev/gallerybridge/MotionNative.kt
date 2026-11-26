@@ -19,7 +19,7 @@ internal data class MotionLocal(
         date.toString(), favorite.toString(), trashed.toString(), generation.toString(), owner.orEmpty())
     fun journal(): String = JSONObject().put("uri", uri.toString()).put("sha", sha)
         .put("bytes", bytes).put("path", path).put("name", name)
-        .put("fingerprint", fingerprint()).toString()
+        .put("date", date).put("fingerprint", fingerprint()).toString()
 }
 
 internal data class MotionOperation(

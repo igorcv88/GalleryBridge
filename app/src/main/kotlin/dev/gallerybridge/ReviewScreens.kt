@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.dp
 internal fun DuplicateScreen(model: BridgeModel, actions: Actions) {
     Text("Confira arquivos selecionados por conteúdo. Favoritos e JPEGs com movimento ou estruturas desconhecidas ficam protegidos.")
     OutlinedButton(onClick = actions.selectDuplicates, enabled = !model.busy) { Text("Selecionar fotos") }
+    OutlinedButton(onClick = model::previewCatalogDuplicates, enabled = !model.busy) {
+        Text("Rever correspondências do catálogo")
+    }
     OutlinedButton(onClick = { model.finishDuplicateMoves(null) }, enabled = !model.busy) {
         Text("Conferir movimentos interrompidos")
     }

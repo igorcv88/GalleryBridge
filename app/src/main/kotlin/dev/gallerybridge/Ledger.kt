@@ -88,6 +88,28 @@ internal class Ledger(context: Context, name: String = "gallerybridge.db") : SQL
         )""".trimIndent())
     }
 
+    fun duplicateCatalogTargets(): List<String> = readableDatabase.rawQuery("""
+        WITH known AS (
+            SELECT t.sha,t.uri FROM local_target t WHERE EXISTS (
+                SELECT 1 FROM entries e JOIN sources s ON s.id=e.source
+                WHERE e.sha=t.sha AND e.mime LIKE 'image/%' AND e.restricted=0 AND s.state='VERIFIED'
+            )
+            UNION
+            SELECT p.sha,p.uri FROM publication p
+            JOIN entries e ON e.source=p.source AND e.ordinal=p.ordinal
+            WHERE p.state='E1' AND p.uri IS NOT NULL AND e.mime LIKE 'image/%' AND e.restricted=0
+        ), indexed AS (
+            SELECT sha,uri FROM known WHERE NOT EXISTS (
+                SELECT 1 FROM duplicate_operation o WHERE o.uri=known.uri AND o.state='MOVED_LOCAL'
+            )
+        ), grouped AS (
+            SELECT sha FROM indexed GROUP BY sha HAVING count(*) > 1
+        )
+        SELECT DISTINCT i.uri FROM indexed i JOIN grouped g ON g.sha=i.sha ORDER BY i.uri LIMIT 1000
+    """.trimIndent(), null).use { rows -> buildList {
+        while (rows.moveToNext()) add(rows.getString(0))
+    } }
+
     fun duplicateJobs(): List<DuplicateJob> = readableDatabase.rawQuery(
         "SELECT uri,plan,keeper,candidate,state FROM duplicate_operation ORDER BY uri", null
     ).use { rows ->
