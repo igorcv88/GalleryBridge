@@ -19,10 +19,21 @@ internal class MediaSyncDiagnostics(private val context: Context) {
         return MediaSyncSnapshot("Indicadores agregados do agente", counts[0], counts[1], counts[2], counts[3])
     }
 
-    @Suppress("SwallowedException")
     fun inspect(item: Item, localTargets: List<String>, checkpoint: () -> Unit): MediaSyncItemObservation {
         val uri = favoriteTargets(item, localTargets).singleOrNull()?.let(Uri::parse)
             ?: return MediaSyncItemObservation("A consulta exige uma única mídia local identificada.")
+        val expected = buildSet {
+            add(item.sha to item.size)
+            val outputSha = item.outputSha
+            val outputSize = item.outputSize
+            if (outputSha != null && outputSize != null) add(outputSha to outputSize)
+        }
+        return inspectExact(uri, expected, checkpoint)
+    }
+
+    @Suppress("SwallowedException")
+    fun inspectExact(uri: Uri, expected: Set<Pair<String, Long>>, checkpoint: () -> Unit): MediaSyncItemObservation {
+        if (expected.isEmpty()) return MediaSyncItemObservation("Identidade local indisponível.")
         if (android.os.Build.VERSION.SDK_INT < 30 || !isMediaItem(uri) || uri.pathSegments.first() != MediaStore.VOLUME_EXTERNAL_PRIMARY)
             return MediaSyncItemObservation("O perfil exige uma mídia do armazenamento principal.")
         val resolver = context.contentResolver
@@ -40,14 +51,12 @@ internal class MediaSyncDiagnostics(private val context: Context) {
             return MediaSyncItemObservation("Caminho local fora do perfil.")
         }
         val bytes = try {
-            resolver.openInputStream(uri)?.use { digest(it, maxBytes = maxOf(item.size, item.outputSize ?: 0), checkpoint = checkpoint) }
+            resolver.openInputStream(uri)?.use { digest(it, maxBytes = expected.maxOf { it.second }, checkpoint = checkpoint) }
         } catch (failure: BridgeFailure) {
             if (failure.reason != Reason.INTEGRITY) throw failure
             null
         } catch (_: java.io.IOException) { null } catch (_: SecurityException) { null }
-        val original = bytes?.sha == item.sha && bytes.bytes == item.size
-        val derivative = item.outputSha != null && bytes?.sha == item.outputSha && bytes.bytes == item.outputSize
-        if (!original && !derivative) return MediaSyncItemObservation("Bytes locais divergentes.")
+        if (bytes == null || (bytes.sha to bytes.bytes) !in expected) return MediaSyncItemObservation("Bytes locais divergentes.")
         val filePath = (directory.trimEnd('/') + "/" + name).replace("'", "''")
         val id = requireNotNull(uri.lastPathSegment).toLong()
         val sql = "PRAGMA query_only=ON;" +

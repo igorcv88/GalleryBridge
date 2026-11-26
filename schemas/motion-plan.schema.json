@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MotionPlan proposal",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "group_id",
+    "decision",
+    "members",
+    "evidence",
+    "delete_authorized",
+    "remote_server_verified",
+    "album_membership_verified"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "group_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decision": {
+      "enum": [
+        "COMPOSE",
+        "KEEP_HISTORICAL",
+        "KEEP_RECOMPOSED",
+        "REVIEW_STATIC",
+        "REVIEW_VIDEO",
+        "HOLD",
+        "KEEP_BOTH"
+      ]
+    },
+    "members": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "role"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "STILL",
+              "VIDEO_COMPONENT",
+              "HISTORICAL_MOTION",
+              "RECOMPOSED_MOTION",
+              "STANDALONE_VIDEO"
+            ]
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "selected_survivor": {
+            "type": "boolean"
+          },
+          "proposed_removal": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "pair_identifier_match",
+        "still_verified",
+        "video_verified",
+        "sdk_link_clean",
+        "historical_hint_only",
+        "metadata_preserved"
+      ],
+      "properties": {
+        "pair_identifier_match": {
+          "type": "boolean"
+        },
+        "still_verified": {
+          "type": "boolean"
+        },
+        "video_verified": {
+          "type": "boolean"
+        },
+        "sdk_link_clean": {
+          "type": "boolean"
+        },
+        "historical_hint_only": {
+          "type": "boolean"
+        },
+        "metadata_preserved": {
+          "type": "boolean"
+        }
+      }
+    },
+    "delete_authorized": {
+      "const": false
+    },
+    "remote_server_verified": {
+      "type": "boolean"
+    },
+    "album_membership_verified": {
+      "type": "boolean"
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

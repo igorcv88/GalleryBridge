@@ -47,6 +47,21 @@ class MainActivity : ComponentActivity() {
     private val motionPicker = registerForActivityResult(ActivityResultContracts.CreateDocument("image/jpeg")) { uri ->
         if (uri != null) model.exportMotion(uri)
     }
+    private val survivorPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) model.selectMotionSurvivor(keepReadGrant(uri))
+    }
+    private val redundantPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) model.compareMotion(keepReadGrant(uri))
+    }
+    private val trashResult = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        model.finishMotionOperation(result.resultCode == RESULT_OK)
+    }
+
+    private fun keepReadGrant(uri: Uri): Uri {
+        runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        return uri
+    }
+
     private val favoriteResult = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         model.finishFavorites(result.resultCode == RESULT_OK)
     }
@@ -66,7 +81,14 @@ class MainActivity : ComponentActivity() {
                     takeout = { openExternal(Intent(Intent.ACTION_VIEW, Uri.parse("https://takeout.google.com/"))) },
                     favorite = { item, desired -> model.prepareFavorite(item, desired, ::launchFavorite) },
                     favorites = { changes -> model.prepareFavorites(changes, ::launchFavorite) },
-                    motion = { motionPicker.launch("GalleryBridge-Motion.jpg") }
+                    motion = { motionPicker.launch("GalleryBridge-Motion.jpg") },
+                    motionActions = MotionActions(
+                        { survivorPicker.launch(arrayOf("image/*")) },
+                        { redundantPicker.launch(arrayOf("image/*", "video/*")) },
+                        ::launchMotionRequest,
+                        { uri -> openExternal(Intent(Intent.ACTION_VIEW, uri)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
+                    )
                 ))
             }
         }
@@ -88,6 +110,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun launchMotionRequest(request: android.app.PendingIntent) {
+        try {
+            trashResult.launch(IntentSenderRequest.Builder(request.intentSender).build())
+        } catch (_: RuntimeException) {
+            model.finishMotionOperation(false)
+        }
+    }
+
     private fun launchFavorite(request: android.app.PendingIntent) {
         try {
             favoriteResult.launch(IntentSenderRequest.Builder(request.intentSender).build())
@@ -101,7 +131,8 @@ class MainActivity : ComponentActivity() {
 internal data class Actions(
     val pickZips: () -> Unit, val pickLocal: () -> Unit, val export: () -> Unit,
     val exportCatalog: () -> Unit, val openGallery: () -> Unit, val takeout: () -> Unit,
-    val favorite: (Item, Boolean) -> Unit, val favorites: (List<FavoriteChange>) -> Unit, val motion: () -> Unit
+    val favorite: (Item, Boolean) -> Unit, val favorites: (List<FavoriteChange>) -> Unit, val motion: () -> Unit,
+    val motionActions: MotionActions
 )
 
 internal class BridgeModel(application: Application) : AndroidViewModel(application) {
@@ -109,6 +140,7 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
     private val work = Work(application, ledger)
     private val favorites = FavoriteReconciliation(application, ledger)
     private val motion = MotionExport(application, ledger)
+    private val motionNative = MotionNative(application, ledger, motion)
     private val device = Device(application)
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
@@ -325,6 +357,163 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    var motionInventory by mutableStateOf<List<MotionInventoryEntry>>(emptyList())
+        private set
+    var motionOffset by mutableStateOf(0)
+        private set
+    var motionSurvivor by mutableStateOf<Uri?>(null)
+        private set
+    private var knownHistoricalSha: String? = null
+    var motionComparison by mutableStateOf<MotionComparison?>(null)
+        private set
+    var motionOperation by mutableStateOf<MotionOperation?>(null)
+        private set
+    var lastMotionUri by mutableStateOf<Uri?>(null)
+        private set
+    private var deferredMotionResult: Boolean? = null
+
+    fun inventoryMotion(offset: Int = motionOffset) = run {
+        readMotionInventory(offset)
+        null
+    }
+
+    private fun readMotionInventory(offset: Int) {
+        val rows = ledger.motionGroups(24, offset).mapNotNull { members ->
+            localCheckpoint()
+            val items = members.mapNotNull { ledger.item(it.sha) }
+            val photos = items.filter { !it.mime.startsWith("video/") }
+            val photo = photos.singleOrNull()
+            val video = photo?.let(motion::pair)
+            val key = if (photo != null && video != null) motion.key(photo, video) else null
+            val label = when {
+                photo == null && photos.isEmpty() -> "Vídeo sem imagem identificada"
+                photo == null || members.size > 2 -> "Par ambíguo"
+                motion.stillMime(photo) != "image/jpeg" -> "Formato sem recomposição nesta versão"
+                video == null -> "Par incompleto ou protegido"
+                ledger.motionPublication(requireNotNull(key))?.second == "INDEXED_LOCAL" -> "Indexada localmente"
+                photo.sha == knownHistoricalSha -> "Motion Photo equivalente selecionada"
+                motion.staged(photo, video) -> "Recomposta e pronta para publicar"
+                else -> "Par confirmado"
+            }
+            val representative = photo ?: items.firstOrNull() ?: return@mapNotNull null
+            MotionInventoryEntry(representative, video, label)
+        }.distinctBy { it.photo.sha }
+        val journal = ledger.motionOperation()
+        handler.post {
+            motionInventory = rows
+            motionOffset = offset
+            motionOperation = journal
+        }
+    }
+
+    fun composeMotionPage() = withSettings { settings ->
+        val tasks = motionInventory.filter { it.status == "Par confirmado" }
+            .take(minOf(settings.limit, 24)).map { it.photo }.iterator()
+        val partition = (getApplication<Application>().filesDir.usableSpace - settings.reserve) / 2
+        demand(partition > 0, Reason.SPACE)
+        var complete = 0
+        var failures = 0
+        val dispatchGate = gate(settings)
+        runMotionQueue(tasks, 2, mayDispatch = {
+            if (pauseRequested) false else {
+                dispatchGate.check()
+                true
+            }
+        }, process = { photo ->
+            try {
+                motion.stage(photo, settings.reserve + partition, gate(settings)::check)
+                null
+            } catch (failure: BridgeFailure) {
+                failure.reason
+            } catch (_: java.io.IOException) {
+                Reason.INTEGRITY
+            } catch (_: SecurityException) {
+                Reason.NEEDS_USER_ACTION
+            }
+        }, completed = { reason ->
+            if (reason == null) complete++ else failures++
+            progress("Motion Photos · $complete prontas, $failures em revisão" +
+                (reason?.let { " · ${it.name}" } ?: ""))
+        })
+        readMotionInventory(motionOffset)
+        "$complete recomposições preparadas. $failures pendentes. A publicação é uma etapa separada."
+    }
+
+    fun publishMotion(photo: Item) = withSettings { settings ->
+        val uri = motionNative.publish(photo, settings.reserve, gate(settings)::check)
+        readMotionInventory(motionOffset)
+        handler.post { lastMotionUri = uri }
+        "Cópia indexada localmente. Confira a reprodução na Galeria antes de sincronizar."
+    }
+
+    fun selectMotionSurvivor(uri: Uri) = run {
+        val canonical = motionNative.canonical(uri)
+        val exact = motionNative.matchingOriginal(canonical, ::localCheckpoint)
+        knownHistoricalSha = exact?.sha
+        readMotionInventory(motionOffset)
+        handler.post { motionSurvivor = canonical; motionComparison = null }
+        if (exact == null) "Selecione agora o possível redundante."
+        else "Motion Photo selecionada com os mesmos componentes do ZIP. O par fica fora da recomposição nesta revisão."
+    }
+
+    fun comparisonDismiss() { motionComparison = null }
+
+    fun compareMotion(uri: Uri) = run {
+        val survivor = motionSurvivor ?: throw BridgeFailure(Reason.NEEDS_USER_ACTION)
+        val candidate = motionNative.canonical(uri)
+        val plan = motionNative.compare(survivor, candidate, ::localCheckpoint)
+        handler.post { motionComparison = plan }
+        plan.reason
+    }
+
+    fun observeMotionLink(plan: MotionComparison) = run {
+        demand(diagnostics, Reason.NEEDS_USER_ACTION)
+        val item = plan.survivor
+        val observation = MediaSyncDiagnostics(getApplication()).inspectExact(
+            item.uri, setOf(item.sha to item.bytes), ::localCheckpoint
+        )
+        "MediaSync: ${observation.status} Reprodução e conta remota permanecem separadas."
+    }
+
+    fun moveMotion(plan: MotionComparison, attestation: MotionAttestation) = withSettings { settings ->
+        val state = motionNative.moveForReview(plan, attestation, settings.reserve, gate(settings)::check)
+        handler.post { motionOperation = state; motionComparison = null }
+        "Movimento local: ${state.state}. Confira a ligação na Galeria Samsung."
+    }
+
+    fun trashMotion(plan: MotionComparison, attestation: MotionAttestation,
+        launch: (android.app.PendingIntent) -> Unit) = withSettings { settings ->
+        val request = motionNative.requestTrash(plan, attestation, settings.reserve, gate(settings)::check)
+        val journal = ledger.motionOperation()
+        handler.post { motionOperation = journal; motionComparison = null; launch(request) }
+        null
+    }
+
+    fun undoMotionMove() = withSettings { settings ->
+        val result = motionNative.undoMove(gate(settings)::check)
+        handler.post { motionOperation = result; motionComparison = null }
+        "Reversão local: ${result.state}. Efeito remoto não verificado."
+    }
+
+    fun restoreMotion(launch: (android.app.PendingIntent) -> Unit) = run {
+        val request = motionNative.requestRestore(::localCheckpoint)
+        val journal = ledger.motionOperation()
+        handler.post { motionOperation = journal; launch(request) }
+        null
+    }
+
+    fun finishMotionOperation(approved: Boolean?) {
+        if (busy) {
+            if (approved != null) deferredMotionResult = approved
+            return
+        }
+        run {
+            val state = motionNative.finish(approved, ::localCheckpoint)
+            handler.post { motionOperation = state }
+            state?.let { "Resultado local: ${it.state}. Efeito remoto não verificado." }
+        }
+    }
+
     fun previewFavorites() = run {
         if (android.os.Build.VERSION.SDK_INT < 30) return@run "Favoritos locais precisam do Android 11 ou posterior."
         val entries = favorites.preview(::localCheckpoint)
@@ -434,6 +623,10 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
 
     fun export(uri: Uri) = run {
         val report = ledger.summary().put("observed_at", java.time.Instant.now().toString())
+        ledger.motionOperation()?.let { op ->
+            report.put("motion_review", JSONObject().put("plan_digest", op.digest).put("state", op.state)
+                .put("remote_server_verified", false).put("delete_authorized", false))
+        }
         if (diagnostics) report.put("helper_diagnostics", snapshot?.let {
             JSONObject().put("uid_rx_total", it.helperRx).put("uid_tx_total", it.helperTx)
                 .put("thermal_status", it.thermal).put("wifi_unmetered", it.wifi)
@@ -516,6 +709,10 @@ internal class BridgeModel(application: Application) : AndroidViewModel(applicat
                     batches = data.batches
                 }
                 busy = false
+                deferredMotionResult?.let {
+                    deferredMotionResult = null
+                    finishMotionOperation(it)
+                }
                 deferredFavoriteResult?.let {
                     deferredFavoriteResult = null
                     finishFavorites(it)

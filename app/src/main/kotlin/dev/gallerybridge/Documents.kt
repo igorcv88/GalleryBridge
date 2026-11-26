@@ -40,12 +40,15 @@ internal class Documents(private val context: Context) {
         }
         val budget = context.cacheDir.usableSpace - reserve
         demand(budget > 0 && (expectedSize == null || expectedSize in 1..budget), Reason.SPACE)
-        // Process death can leave one app-private spool. The serialized worker is its sole owner.
-        val spool = File(context.cacheDir, "bridge-archive.spool")
+        // Each verification can run independently of the other selected ZIPs.
+        val spool = File.createTempFile("bridge-archive-", ".spool", context.cacheDir)
         try {
             open(uri).use { input ->
                 spool.outputStream().use { output ->
-                    val result = digest(input, output, budget, checkpoint)
+                    val result = digest(input, output, budget) {
+                        checkpoint()
+                        demand(context.cacheDir.usableSpace > reserve, Reason.SPACE)
+                    }
                     demand(expectedSize == null || expectedSize == result.bytes, Reason.SOURCE_CHANGED)
                 }
             }
@@ -78,11 +81,15 @@ internal fun captureMetadata(archive: Archive, member: Member, checkpoint: () ->
             length += n
         }
         raw.reset()
-        val format = verifiedFormat(header.copyOf(length), mime)
+        val bytes = header.copyOf(length)
+        val stillMime = if (mime in setOf("image/heic", "image/heif") && verifiedFormat(bytes, "image/jpeg"))
+            "image/jpeg" else mime
+        val format = verifiedFormat(bytes, stillMime)
         try {
-            val result = JSONObject().put("format_verified", if (format) 1 else 0)
+            val result = JSONObject().put("format_verified", if (format && stillMime == mime) 1 else 0)
+            if (stillMime != mime) result.put("actual_mime", stillMime)
             if (!format) return@use result
-            when (mime) {
+            when (stillMime) {
                 "video/mp4", "video/quicktime", "video/3gpp" -> {
                     val facts = inspectQuickTime(input, member.size)
                     result.put("keys", facts.keys?.json()).put("container", facts.container?.json())
@@ -97,8 +104,11 @@ internal fun captureMetadata(archive: Archive, member: Member, checkpoint: () ->
                     exif.latLong?.let { result.put("latitude", it[0]).put("longitude", it[1]) }
                     result.put("orientation", exif.getAttribute(ExifInterface.TAG_ORIENTATION))
                     result.put("description", exif.getAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION)?.take(65_536))
-                    result.put("live_id", appleMakerNoteId(exif.getAttributeBytes(ExifInterface.TAG_MAKER_NOTE))
-                        ?: appleXmpId(exif.getAttribute(ExifInterface.TAG_XMP)))
+                    val pairIds = listOfNotNull(
+                        appleMakerNoteId(exif.getAttributeBytes(ExifInterface.TAG_MAKER_NOTE)),
+                        appleXmpId(exif.getAttribute(ExifInterface.TAG_XMP))
+                    ).distinct()
+                    result.put("live_id", pairIds.singleOrNull())
                 }
             }
             result

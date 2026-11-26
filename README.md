@@ -75,3 +75,17 @@ Use JDK 21, Android SDK 36 e Build Tools 36.0.0.
 - [Origem do código](docs/provenance.md)
 
 </details>
+
+## Live Photos e fotos com movimento
+
+1. Analise os ZIPs em **Origem**. Abra **Motion Photos** e toque em **Analisar pares**. O app procura o identificador interno da foto e do vídeo. Pares incompletos, ambíguos ou protegidos ficam em revisão.
+2. Se você já tiver a versão histórica com movimento, selecione-a antes de recompor. Quando o app comprovar que ela contém os mesmos componentes do ZIP, o par selecionado fica fora da recomposição nessa revisão.
+3. Toque em **Recompor pares desta página**. As cópias ficam no app até você aprovar **Publicar cópia**. A recomposição mantém a imagem e o vídeo originais, sem recodificar. Abra a cópia publicada e teste movimento e áudio na Galeria.
+4. Para revisar uma redundância, escolha primeiro a foto que deve permanecer. Depois escolha a recomposta, a estática ou o vídeo avulso que deseja comparar. Se o item estiver só na nuvem, use o download do próprio app de origem, quando disponível. O GalleryBridge compara o arquivo escolhido e nunca faz download em massa.
+5. Para um redundante exclusivamente local, confira os atributos e a reprodução da foto que permanece. Depois use **Mover para o álbum GalleryBridge_Revisao** quando o GalleryBridge tiver criado a cópia, ou solicite **Enviar redundante à lixeira**. O Android pede consentimento. A tela acompanha o resultado no aparelho e oferece restauração da última ação compatível.
+
+JPEG compatível pode ser recomposto. O GalleryBridge lê o formato Motion Photo JPEG com XMP e uma variante Samsung SEF de entrada única. HEIC, HDR com dados auxiliares e variantes que o app não consegue verificar ficam em revisão. As origens no Takeout são mantidas. As cópias temporárias e verificadas usam espaço no aparelho.
+
+Uma mídia sincronizada pode sumir do Google Fotos e de outros aparelhos quando for excluída. Use o caminho nativo da Galeria para itens na nuvem e preserve o item se houver dúvida sobre a associação. O app não trata a lixeira local como confirmação de exclusão na nuvem.
+
+Se quiser organizar os álbuns antigos separadamente, considere **Pictures/Arquivo**. Preserve **Restored** para downloads individuais e **Camera** para capturas. O feed reúne as mídias de várias pastas. Remover um álbum ainda preenchido pode remover as mídias que ele contém.

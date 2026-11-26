@@ -89,7 +89,7 @@ internal class ImportTest(private val context: Context, private val instrumentat
                 assertEquals(7L, it.sources().single().id)
                 assertEquals("VERIFIED", it.sources().single().state)
                 assertTrue(it.pendingFavorites().isEmpty())
-                assertEquals(3, it.readableDatabase.version)
+                assertEquals(4, it.readableDatabase.version)
             }
         } finally {
             context.deleteDatabase(name)
@@ -314,11 +314,138 @@ internal class ImportTest(private val context: Context, private val instrumentat
         error("Platform favorite consent did not update the fixture")
     }
 
+    fun motionRecomposeReviewTrashAndRestore() {
+        val db = "motion-${UUID.randomUUID()}.db"
+        val zip = File(context.cacheDir, "$db.zip")
+        instrumentation.context.assets.open("motion-test.zip").use { input ->
+            zip.outputStream().use { input.copyTo(it) }
+        }
+        val created = mutableListOf<Uri>()
+        var activity: MainActivity? = null
+        var staged: File? = null
+        try {
+            Ledger(context, db).use { ledger ->
+                ledger.addSource(Uri.fromFile(zip).toString())
+                Work(context, ledger).ingest(0, {})
+                val groups = ledger.motionGroups(24, 0)
+                assertEquals(1, groups.size)
+                val group = groups.single()
+                assertEquals(2, group.size)
+                val photo = requireNotNull(ledger.item(group.single { !it.video }.sha))
+                val export = MotionExport(context, ledger)
+                val prepared = export.stage(photo, 0, {})
+                staged = prepared.file
+                assertEquals(prepared.file, export.stage(photo, 0, {}).file)
+                val native = MotionNative(context, ledger, export)
+                val resolver = context.contentResolver
+                val pictures = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                // Model death after the provider insert and before the app received its URI.
+                val unreconciled = requireNotNull(resolver.insert(pictures, values(
+                    MediaStore.MediaColumns.DISPLAY_NAME to "GB_Motion_${prepared.key}.jpg",
+                    MediaStore.MediaColumns.MIME_TYPE to "image/jpeg",
+                    MediaStore.MediaColumns.RELATIVE_PATH to "Pictures/GalleryBridge_Motion/",
+                    MediaStore.MediaColumns.IS_PENDING to 1
+                ))).also(created::add)
+                val winner = native.publish(photo, 0, {})
+                assertEquals(unreconciled, winner)
+                assertEquals(winner, native.publish(photo, 0, {}))
+                val date = resolver.query(winner, arrayOf(MediaStore.MediaColumns.DATE_TAKEN), null, null, null)
+                    ?.use { if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null }
+                val still = requireNotNull(resolver.insert(pictures, values(
+                    MediaStore.MediaColumns.DISPLAY_NAME to "$db.jpg", MediaStore.MediaColumns.MIME_TYPE to "image/jpeg",
+                    MediaStore.MediaColumns.RELATIVE_PATH to "Pictures/GalleryBridge_Fixture/",
+                    MediaStore.MediaColumns.DATE_TAKEN to date, MediaStore.MediaColumns.IS_PENDING to 1
+                ))).also(created::add)
+                java.util.zip.ZipFile(zip).use { source ->
+                    source.getInputStream(source.getEntry("Takeout/fixture/still.jpg")).use { input ->
+                        requireNotNull(resolver.openOutputStream(still)).use { input.copyTo(it) }
+                    }
+                }
+                resolver.update(still, values(MediaStore.MediaColumns.IS_PENDING to 0), null, null)
+                val plan = native.compare(winner, still, {})
+                assertEquals(MotionDecision.REVIEW_STATIC, plan.decision)
+                assertTrue(plan.eligible)
+                assertEquals(null, ledger.motionOperation())
+                val incomplete = MotionAttestation(true, true, false)
+                assertTrue(runCatching { native.requestTrash(plan, incomplete, 0, {}) }.isFailure)
+                assertEquals(null, ledger.motionOperation())
+                val consent = MotionAttestation(true, true, true)
+                val move = native.moveForReview(plan, consent, 0, {})
+                assertEquals("MOVED_LOCAL", move.state)
+                assertTrue(runCatching { native.requestTrash(plan, consent, 0, {}) }.isFailure)
+                assertEquals("RESTORED_PATH", native.undoMove {}.state)
+                val fresh = native.compare(winner, still, {})
+                assertEquals("Pictures/GalleryBridge_Fixture/", fresh.candidate.path)
+                native.requestTrash(fresh, consent, 0, {})
+                assertEquals("CANCELLED", native.finish(false, {})?.state)
+                assertEquals(0, trashFlag(still))
+                activity = instrumentation.startActivitySync(android.content.Intent(context, MainActivity::class.java)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+                val active = requireNotNull(activity)
+                val trash = native.requestTrash(fresh, consent, 0, {})
+                instrumentation.runOnMainSync { active.startIntentSenderForResult(trash.intentSender, 91, null, 0, 0, 0) }
+                waitForTrashFlag(still, 1)
+                assertEquals("REMOVAL_OBSERVED", native.finish(true, {})?.state)
+                assertEquals(0, trashFlag(winner))
+                val restore = native.requestRestore {}
+                instrumentation.runOnMainSync { active.startIntentSenderForResult(restore.intentSender, 92, null, 0, 0, 0) }
+                waitForTrashFlag(still, 0)
+                assertEquals("RESTORED_LOCAL", native.finish(true, {})?.state)
+                assertEquals(photo.sha, native.compare(winner, still, {}).candidate.sha)
+            }
+        } finally {
+            activity?.let { instrumentation.runOnMainSync(it::finish) }
+            created.forEach { context.contentResolver.delete(it, null, null) }
+            staged?.delete()
+            zip.delete()
+            context.deleteDatabase(db)
+        }
+    }
+
+    @android.annotation.TargetApi(30)
+    private fun trashFlag(uri: Uri): Int? {
+        val args = android.os.Bundle().apply {
+            putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_INCLUDE)
+        }
+        return context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.IS_TRASHED), args, null)
+            ?.use { if (it.moveToFirst()) it.getInt(0) else null }
+    }
+
+    private fun waitForTrashFlag(uri: Uri, expected: Int) {
+        val automation = instrumentation.uiAutomation
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
+        val observed = linkedSetOf<String>()
+        val deadline = android.os.SystemClock.elapsedRealtime() + 50_000
+        while (android.os.SystemClock.elapsedRealtime() < deadline) {
+            if (trashFlag(uri) == expected) return
+            val roots = listOfNotNull(automation.rootInActiveWindow) + automation.windows.mapNotNull { it.root }
+            for (root in roots) {
+                val owner = root.packageName?.toString()
+                observed.add(owner.orEmpty())
+                if (owner?.contains("providers.media") == true) {
+                    describeButtons(root, observed)
+                    if (approve(root)) break
+                }
+            }
+            Thread.sleep(500)
+        }
+        error("Expected trash flag $expected; actual ${trashFlag(uri)}; windows and buttons: $observed")
+    }
+
+    private fun describeButtons(node: android.view.accessibility.AccessibilityNodeInfo?, labels: MutableSet<String>) {
+        if (node == null) return
+        if (node.isClickable) labels.add("${node.viewIdResourceName} ${node.text}")
+        repeat(node.childCount) { describeButtons(node.getChild(it), labels) }
+    }
+
     private fun approve(node: android.view.accessibility.AccessibilityNodeInfo?): Boolean {
         if (node == null) return false
         val label = node.text?.toString()?.trim()?.lowercase(java.util.Locale.US)
         if (node.isClickable && (node.viewIdResourceName == "android:id/button1" ||
-                label in setOf("allow", "favorite", "add to favorites", "ok"))) {
+                label in setOf("allow", "favorite", "add to favorites", "move to trash", "move to bin", "trash", "restore", "ok"))) {
             return node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
         }
         return (0 until node.childCount).any { approve(node.getChild(it)) }

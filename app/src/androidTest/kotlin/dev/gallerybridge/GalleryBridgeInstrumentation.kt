@@ -20,7 +20,8 @@ class GalleryBridgeInstrumentation : Instrumentation() {
             "upgradeKeepsExistingCatalog" to fixtures::upgradeKeepsExistingCatalog,
             "corruptSelectedMemberCannotPublishAndResumesWithOneReceipt" to fixtures::corruptSelectedMemberCannotPublishAndResumesWithOneReceipt,
             "localRematchAfterNativeRestoreDoesNotRestage" to fixtures::localRematchAfterNativeRestoreDoesNotRestage,
-            "derivativesAndHistoricalFavorites" to fixtures::derivativesAndHistoricalFavorites
+            "derivativesAndHistoricalFavorites" to fixtures::derivativesAndHistoricalFavorites,
+            "motionRecomposeReviewTrashAndRestore" to fixtures::motionRecomposeReviewTrashAndRestore
         ).filter { selectedTest == null || it.first == selectedTest }
         check(tests.isNotEmpty()) { "Unknown instrumentation test: $selectedTest" }
         var failures = 0

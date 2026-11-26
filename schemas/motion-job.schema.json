@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Motion job checkpoint",
+  "type": "object",
+  "required": [
+    "job_id",
+    "plan_digest",
+    "state",
+    "attempts",
+    "remote_server_verified",
+    "delete_authorized"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string"
+    },
+    "plan_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "state": {
+      "enum": [
+        "DISCOVERED",
+        "PAIR_VERIFIED",
+        "COMPOSED_VERIFIED",
+        "STAGED",
+        "INDEXED_LOCAL",
+        "SDK_LINKED_CLEAN",
+        "READY",
+        "MOVED_PENDING",
+        "SDK_PATH_CLEAN",
+        "DONE",
+        "HOLD",
+        "UNSUPPORTED",
+        "CANCELLED",
+        "TRASH_REQUESTED",
+        "REMOVAL_OBSERVED"
+      ]
+    },
+    "attempts": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "reason_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "output_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "media_store_uri": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "remote_fingerprint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "remote_server_verified": {
+      "type": "boolean"
+    },
+    "delete_authorized": {
+      "type": "boolean"
+    }
+  },
+  "description": "Journal proposal; application layer must enforce consent and revalidation. Schema does not grant authorization."
+}

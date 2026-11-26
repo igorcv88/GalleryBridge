@@ -1,0 +1,47 @@
+id,scenario,expected
+MP01,"Identificador igual, par único, sem histórica",COMPOSE
+MP02,Nome igual sem ID,HOLD
+MP03,ID reutilizado em fotos diferentes,HOLD
+MP04,Motion histórica verificada still+vídeo e campos,KEEP_HISTORICAL
+MP05,Histórico só por soma de tamanhos,HOLD
+MP06,Still igual mas vídeo diferente,KEEP_BOTH
+MP07,"Estática equivalente, motion válida, campos preservados",REVIEW_STATIC
+MP08,"Estática favorita e motion não favorita, sem resolução",HOLD
+MP09,"Vídeo componente com hash igual, relação provada",REVIEW_VIDEO
+MP10,Vídeo independente mesmo nome,KEEP_BOTH
+MP11,Histórico com aliases múltiplos,HOLD
+MP12,Motion nova única e validada,KEEP_RECOMPOSED
+FMT01,JPEG SEF valid + SHA video,PASS
+FMT02,HEIC mpvd/sefd valid,PASS_OR_EXPLICIT_UNSUPPORTED
+FMT03,JPEG named HEIC,DETECT_JPEG
+FMT04,BMFF video as photo,HOLD
+FMT05,Truncated or conflicting boxes,HOLD
+FMT06,Repeated embedded prefix,HOLD_IF_AMBIGUOUS
+FMT07,Corrupt ZIP CRC/SHA,HOLD
+FMT08,Video changed / audio lost,HOLD
+FMT09,Still orientation HDR or metadata loss,HOLD
+FMT10,"Missing ExifTool embedded tag, valid container",VERIFY_BINARY
+FMT11,Time offset vs naive timestamp,NO_UNSAFE_COMPARE
+OP01,Preview,ZERO_WRITES
+OP02,Crash after staging,RESUME_NO_DUPLICATE
+OP03,Crash after move before journal,REVALIDATE
+OP04,Destination collision,HOLD
+OP05,Two groups claim survivor,HOLD
+OP06,Consent denied,ZERO_DELETES
+OP07,SDK ID missing,PENDING
+OP08,SDK ID mismatch,HOLD
+OP09,SDK path pending,PENDING
+OP10,Dirty becomes clean same fingerprint,SDK_PATH_CLEAN
+OP11,Remote fingerprint changed,HOLD
+OP12,Homonymous destination DCIM/Pictures,EXACT_PATH_ONLY
+OP13,95 ready / 65 pending,95_DONE_65_HOLD
+OP14,Sync requested but no progress,BOUNDED_RETRY
+OP15,Unknown schema / no root,UNSUPPORTED_OR_ASSISTED
+OP16,Low disk/metered network,PAUSE
+OP17,Plan stale,REPREVIEW
+OP18,Trash local only,REMOTE_UNKNOWN
+OP19,Cloud only inaccessible,NATIVE_ASSISTED_OR_UNSUPPORTED
+OP20,Album nonempty,NO_DELETE_ALBUM
+OP21,Restored reserved,NO_MOVE_TO_RESTORED
+OP22,Physical motion playback and audio,DEVICE_PENDING_IF_UNAVAILABLE
+OP23,Survivor survives trash after sync,DEVICE_PENDING_IF_UNAVAILABLE

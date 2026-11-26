@@ -37,7 +37,7 @@ import java.time.Instant
 import java.util.Locale
 import org.json.JSONObject
 
-private enum class Screen(val label: String) { SOURCES("Origem"), BATCH("Lotes"), METADATA("Metadados"), REPORT("Relatório"), DIAGNOSTICS("Avançado") }
+private enum class Screen(val label: String) { SOURCES("Origem"), BATCH("Lotes"), METADATA("Metadados"), MOTION("Motion Photos"), REPORT("Relatório"), DIAGNOSTICS("Avançado") }
 
 @Composable
 internal fun Workspace(model: BridgeModel, actions: Actions) {
@@ -153,6 +153,7 @@ internal fun Workspace(model: BridgeModel, actions: Actions) {
                             }
                         }
                     }
+                    Screen.MOTION -> motionScreen(model, actions)
                     Screen.REPORT -> item {
                         Text("Evidência local e pendências", style = MaterialTheme.typography.titleLarge)
                         Text("${summary.optLong("media_store_receipts")} recibos locais · ${summary.optLong("local_absence_unknown")} ausências em revisão")
@@ -206,6 +207,7 @@ internal fun Workspace(model: BridgeModel, actions: Actions) {
             confirmButton = { Button(enabled = !model.busy, onClick = { model.plan = null; model.applyBatch(plan) }) { Text("Publicar cópias locais") } },
             dismissButton = { TextButton(onClick = { model.plan = null }) { Text("Voltar") } })
     }
+    model.motionComparison?.let { MotionReviewDialog(model, it, actions.motionActions) }
     model.detail?.let { MetadataDialog(model, actions, it) }
     model.favoritePlan?.let { FavoriteDialog(model, actions, it) }
     if (rootConsent) AlertDialog(onDismissRequest = { rootConsent = false },

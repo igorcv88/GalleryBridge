@@ -1,0 +1,20 @@
+{
+  "synthetic": true,
+  "initial": {
+    "READY": 95,
+    "RESTORED_PENDING": 65
+  },
+  "pending_reason": "SDK_ID_MISSING",
+  "expected_after_ready_processed": {
+    "DONE": 95,
+    "RESTORED_PENDING": 65
+  },
+  "assertions": [
+    "No barrier waiting for pending",
+    "No move for missing SDK ID",
+    "No re-extraction on resume",
+    "Bounded retry",
+    "No delete",
+    "Remote server verified remains false"
+  ]
+}
