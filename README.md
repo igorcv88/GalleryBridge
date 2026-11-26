@@ -1,6 +1,21 @@
+<p align="center">
+  <img src=".github/assets/gallerybridge-banner.svg" alt="GalleryBridge" width="100%" />
+</p>
+
+<p align="center">
+  <img alt="Android 10+" src="https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&amp;logoColor=white" />
+  <img alt="Status: experimental" src="https://img.shields.io/badge/status-experimental-0e7490" />
+  <a href="https://github.com/igorcv88/GalleryBridge/actions/workflows/android.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/igorcv88/GalleryBridge/android.yml?branch=main&amp;label=CI" /></a>
+  <a href="https://github.com/igorcv88/GalleryBridge/actions/workflows/release.yml"><img alt="Release build" src="https://img.shields.io/github/actions/workflow/status/igorcv88/GalleryBridge/release.yml?branch=main&amp;label=release" /></a>
+  <a href="https://github.com/igorcv88/GalleryBridge/releases/latest"><img alt="Latest release" src="https://img.shields.io/badge/download-latest-0e7490?logo=github" /></a>
+  <a href="https://github.com/igorcv88/GalleryBridge/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/igorcv88/GalleryBridge/total" /></a>
+  <a href="https://github.com/igorcv88/GalleryBridge/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/igorcv88/GalleryBridge?style=flat" /></a>
+  <a href="LICENSE"><img alt="Direitos reservados" src="https://img.shields.io/badge/licen%C3%A7a-direitos%20reservados-lightgrey" /></a>
+</p>
+
 # GalleryBridge
 
-**Confira sua exportação do Google Fotos e prepare um lote de fotos e vídeos para a Samsung Gallery.**
+**Migração do Google Takeout, reconciliação de mídia e diagnóstico da sincronização da Samsung Gallery.**
 
 O GalleryBridge analisa os arquivos ZIP do Google Takeout, identifica cópias idênticas e permite revisar datas, outros metadados e favoritos antes de preparar a migração. O aplicativo principal funciona em Android 10 ou posterior, sem root. A sincronização com o Google Fotos é feita pela Samsung Gallery nos aparelhos e contas em que o recurso está disponível.
 
@@ -8,7 +23,7 @@ O GalleryBridge analisa os arquivos ZIP do Google Takeout, identifica cópias id
 
 ## Estado do projeto
 
-A versão 0.4.1 está em teste. A análise dos ZIPs, a criação de cópias e a marcação local de favoritos foram exercitadas com arquivos sintéticos. A propagação de favoritos para o Google Fotos e a reprodução de Motion Photos na Samsung Gallery ainda precisam de validação em um Galaxy.
+A versão 0.4.1 está em teste. Além da ingestão do Takeout, inclui revisão de Motion Photos, duplicatas locais, cópias com datas reparadas e diagnóstico opcional do MediaSync. Os testes JVM e instrumentados em AOSP cobrem contratos locais; a validação ponta a ponta em Galaxy e Google Fotos continua pendente.
 
 > [!IMPORTANT]
 > A sincronização pode enviar a mídia inteira, mesmo quando uma duplicata não fica visível. Um lote de 20 GB pode consumir cerca de 20 GB de upload, ou mais se houver novas tentativas. Desative os dados móveis para a sincronização na Samsung Gallery e faça o primeiro piloto em Wi-Fi. As restrições de rede do GalleryBridge valem para o próprio app.
@@ -22,6 +37,10 @@ A versão 0.4.1 está em teste. A análise dos ZIPs, a criação de cópias e a 
 | Recuperar datas e outros metadados | Revisar data, localização, legenda, orientação e pasta de destino. As opções dependem do formato e se aplicam às novas cópias compatíveis. |
 | Recuperar favoritos históricos | Revisar os favoritos indicados no Takeout e marcar arquivos locais correspondentes, com confirmação do Android 11 ou posterior. |
 | Conferir o resultado | Separar a presença local, o favorito no aparelho e sua própria conferência do item no Google Fotos. |
+| Recompor Live Photos | Identificar pares pelo identificador interno, preparar Motion JPEG e publicar com verificação dos componentes; validar a reprodução no Galaxy. |
+| Revisar duplicatas locais | Agrupar JPEGs estáticos de SHA-256 idêntico, escolher o sobrevivente e mover redundâncias confirmadas para uma pasta de revisão. |
+| Corrigir datas | Comparar a data do Takeout e do EXIF; salvar uma nova cópia JPEG compatível após informar data e offset explícitos. |
+| Diagnosticar sincronização | Com root autorizado e perfil reconhecido, observar fila, backoff, erros e último sucesso do MediaSync, sem escrever no banco do agente. |
 
 ## Instalação e primeiro piloto
 
@@ -40,6 +59,20 @@ Para um item que só está na nuvem, abra o item existente na Samsung Gallery e 
 
 A marcação confirmada no Android vale para o arquivo local. Confira o mesmo item no Google Fotos, na conta correta, para saber se o favorito também aparece na nuvem.
 
+## Live Photos e Motion Photos
+
+Na seção **Motion**, analise os pares após a ingestão dos ZIPs. A recomposição copia a foto e o vídeo sem recodificação, com staging e hashes independentes. Revise a publicação e teste a reprodução com áudio na Samsung Gallery. O app permite comparar um sobrevivente e uma possível redundância local, solicitar movimentação ou envio à lixeira com consentimento e reconciliar recibos interrompidos. A operação depende de evidência suficiente e da confirmação de que o redundante não está sincronizado. Itens exclusivamente na nuvem devem ser conferidos pela Gallery; não há exclusão remota automática.
+
+## Duplicatas e reparo de datas
+
+Na seção de duplicatas, selecione arquivos locais ou revise correspondências do catálogo. A implementação atual oferece apenas JPEGs estáticos de bytes exatamente iguais, até 48 alvos por aprovação, protegendo favoritos, movimento, XMP e formatos desconhecidos. As movimentações usam MediaStore, consentimento e diário, sem exclusão permanente. Não equivale a deduplicação global cloud-only nem a comparação por pixels aproximados.
+
+Na seção de datas, selecione uma foto, confira o conflito com o Takeout, informe data e fuso e salve uma **nova cópia**. O original não é alterado; JPEGs com estruturas não verificadas ficam bloqueados. Não há reparo em massa de datas diretamente no Google Fotos.
+
+## Diagnóstico do MediaSync
+
+A leitura opcional com root usa perfil reconhecido do agente Samsung e banco somente leitura. O app distingue progresso da fila, backoff, erro transitório e avanço do último sucesso. A ausência local, um cache ou uma fila vazia não confirmam exclusão, backup ou integridade remota. O fluxo de recuperação abre a Samsung Gallery; não remove commits, força estados, reinicia serviços nem ignora limites térmicos. O relatório exportado contém dados agregados e sanitizados. Consulte [Reconciliação e sync](docs/reconciliacao-e-sync.md) e [Motion Photos](docs/motion-reconciliation.md).
+
 ## Datas, álbuns e privacidade
 
 - Revise fotos antigas e de viagens antes de publicar. Uma data sem informação de fuso fica como horário local, e a Samsung Gallery pode ordenar a mídia por uma data diferente da indicada pelo Takeout.
@@ -47,6 +80,14 @@ A marcação confirmada no Android vale para o arquivo local. Confira o mesmo it
 - A preparação de Motion JPEG é experimental. Teste a reprodução em uma pasta fora da sincronização antes de incluí-la no piloto.
 - O app mantém o catálogo no aparelho, trabalha com os arquivos que você seleciona e preserva os ZIPs originais. Para pedir ajuda, exporte o resumo em **Relatório** e confira o que pretende compartilhar.
 - A liberação automática de espaço fica bloqueada no GalleryBridge. Excluir um item sincronizado pode removê-lo da nuvem e de outros aparelhos. Guarde os originais e confirme os itens na nuvem antes de usar a opção de liberação de espaço da Samsung.
+
+## APKs, CI e releases
+
+- [Releases](https://github.com/igorcv88/GalleryBridge/releases/latest): APK oficial assinado e checksum SHA-256, quando disponível.
+- [Actions](https://github.com/igorcv88/GalleryBridge/actions/workflows/android.yml): testes do motor e do app, lint, Detekt, builds e testes instrumentados em API 30 e 37.0. Commits enviados ao repositório têm APK assinado após os checks, disponível por um dia. PRs externos não recebem a chave privada.
+- Após merge de PR em `main`, o workflow de release repete os checks e publica diretamente em Releases. O canal estável usa a tag móvel `latest`; a label `release:prerelease` no PR antes do merge solicita um pré-release separado. Não são enviados artefatos de Actions no workflow de release.
+
+O APK oficial exige a mesma chave de assinatura para atualizar uma instalação existente. Os antigos APKs de teste podem ter outra chave. Não desinstale antes de preservar seus dados e catálogo. Veja [a configuração de CI e assinatura](docs/ci-release.md).
 
 ## Ajuda
 
