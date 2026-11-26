@@ -61,17 +61,27 @@ A marcação confirmada no Android vale para o arquivo local. Confira o mesmo it
 
 ## Live Photos e Motion Photos
 
-Na seção **Motion**, analise os pares após a ingestão dos ZIPs. A recomposição copia a foto e o vídeo sem recodificação, com staging e hashes independentes. Revise a publicação e teste a reprodução com áudio na Samsung Gallery. O app permite comparar um sobrevivente e uma possível redundância local, solicitar movimentação ou envio à lixeira com consentimento e reconciliar recibos interrompidos. A operação depende de evidência suficiente e da confirmação de que o redundante não está sincronizado. Itens exclusivamente na nuvem devem ser conferidos pela Gallery; não há exclusão remota automática.
+1. Analise os ZIPs em **Origem**. Abra **Motion Photos** e toque em **Analisar pares**. O app procura o identificador interno da foto e do vídeo. Pares incompletos, ambíguos ou protegidos ficam em revisão.
+2. Se você já tiver a versão histórica com movimento, selecione-a antes de recompor. Quando o app comprovar que ela contém os mesmos componentes do ZIP, o par selecionado fica fora da recomposição nessa revisão.
+3. Toque em **Recompor pares desta página**. As cópias ficam no app até você aprovar **Publicar cópia**. A recomposição mantém a imagem e o vídeo originais, sem recodificar. Abra a cópia publicada e teste movimento e áudio na Galeria.
+4. Para revisar uma redundância, escolha primeiro a foto que deve permanecer. Depois escolha a recomposta, a estática ou o vídeo avulso que deseja comparar. Se o item estiver só na nuvem, use o download do próprio app de origem, quando disponível. O GalleryBridge compara o arquivo escolhido e nunca faz download em massa.
+5. Para um redundante exclusivamente local, confira os atributos e a reprodução da foto que permanece. Depois use **Mover para o álbum GalleryBridge_Revisao** quando o GalleryBridge tiver criado a cópia, ou solicite **Enviar redundante à lixeira**. O Android pede consentimento. A tela acompanha o resultado no aparelho e oferece restauração da última ação compatível.
+
+JPEG compatível pode ser recomposto. O GalleryBridge lê o formato Motion Photo JPEG com XMP e uma variante Samsung SEF de entrada única. HEIC, HDR com dados auxiliares e variantes que o app não consegue verificar ficam em revisão. As origens no Takeout são mantidas. As cópias temporárias e verificadas usam espaço no aparelho.
+
+Uma mídia sincronizada pode sumir do Google Fotos e de outros aparelhos quando for excluída. Use o caminho nativo da Galeria para itens na nuvem e preserve o item se houver dúvida sobre a associação. O app não trata a lixeira local como confirmação de exclusão na nuvem.
+
+Se você usa **DCIM/Archive** para o acervo consolidado, mantenha a organização separada da tela de revisão de duplicatas. Preserve **Restored** para downloads individuais e **Camera** para capturas. O feed reúne as mídias de várias pastas. Remover um álbum ainda preenchido pode remover as mídias que ele contém.
 
 ## Duplicatas e reparo de datas
 
-Na seção de duplicatas, selecione arquivos locais ou revise correspondências do catálogo. A implementação atual oferece apenas JPEGs estáticos de bytes exatamente iguais, até 48 alvos por aprovação, protegendo favoritos, movimento, XMP e formatos desconhecidos. As movimentações usam MediaStore, consentimento e diário, sem exclusão permanente. Não equivale a deduplicação global cloud-only nem a comparação por pixels aproximados.
+Na seção **Duplicatas**, selecione arquivos locais ou revise correspondências do catálogo. A pasta de revisão é `Pictures/GalleryBridge_Revisao_Duplicatas`. Se o app fechar durante a operação, confira o diário antes de repetir a seleção. A implementação atual oferece apenas JPEGs estáticos de bytes exatamente iguais, até 48 alvos por aprovação, protegendo favoritos, movimento, XMP e formatos desconhecidos. As movimentações usam MediaStore, consentimento e diário, sem exclusão permanente. Não equivale a deduplicação global cloud-only nem a comparação por pixels aproximados.
 
-Na seção de datas, selecione uma foto, confira o conflito com o Takeout, informe data e fuso e salve uma **nova cópia**. O original não é alterado; JPEGs com estruturas não verificadas ficam bloqueados. Não há reparo em massa de datas diretamente no Google Fotos.
+Na seção **Datas**, selecione uma foto, confira o conflito com o Takeout, informe data e fuso e salve uma **nova cópia**. O original não é alterado; JPEGs com estruturas não verificadas ficam bloqueados. Não há reparo em massa de datas diretamente no Google Fotos.
 
 ## Diagnóstico do MediaSync
 
-A leitura opcional com root usa perfil reconhecido do agente Samsung e banco somente leitura. O app distingue progresso da fila, backoff, erro transitório e avanço do último sucesso. A ausência local, um cache ou uma fila vazia não confirmam exclusão, backup ou integridade remota. O fluxo de recuperação abre a Samsung Gallery; não remove commits, força estados, reinicia serviços nem ignora limites térmicos. O relatório exportado contém dados agregados e sanitizados. Consulte [Reconciliação e sync](docs/reconciliacao-e-sync.md) e [Motion Photos](docs/motion-reconciliation.md).
+Em **Avançado**, solicite a sincronização nativa em Wi-Fi. A leitura opcional com root usa perfil reconhecido do agente Samsung e banco somente leitura. O app distingue progresso da fila, backoff, erro transitório e avanço do último sucesso. A ausência local, um cache ou uma fila vazia não confirmam exclusão, backup ou integridade remota. O fluxo de recuperação abre a Samsung Gallery; não remove commits, força estados, reinicia serviços nem ignora limites térmicos. O relatório exportado contém dados agregados e sanitizados. Consulte [Reconciliação e sync](docs/reconciliacao-e-sync.md) e [Motion Photos](docs/motion-reconciliation.md).
 
 ## Datas, álbuns e privacidade
 
@@ -104,11 +114,12 @@ O código do GalleryBridge está disponível para consulta pública, com direito
 
 Use JDK 21, Android SDK 36 e Build Tools 36.0.0.
 
-    ./gradlew :engine:test :app:testDebugUnitTest :app:lintDebug detekt :app:assembleDebug
+    bash .github/scripts/check-android.sh
     ./gradlew :app:connectedDebugAndroidTest
     apksigner verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
 
 - [Compatibilidade por função](docs/support-matrix.md)
+- [CI, assinatura e releases](docs/ci-release.md)
 - [Reconciliação e protocolo de teste](docs/reconciliation-0.3.1.md)
 - [Arquitetura](docs/architecture.md)
 - [Privacidade](docs/privacy-and-threats.md)
@@ -116,24 +127,3 @@ Use JDK 21, Android SDK 36 e Build Tools 36.0.0.
 - [Origem do código](docs/provenance.md)
 
 </details>
-
-## Live Photos e fotos com movimento
-
-1. Analise os ZIPs em **Origem**. Abra **Motion Photos** e toque em **Analisar pares**. O app procura o identificador interno da foto e do vídeo. Pares incompletos, ambíguos ou protegidos ficam em revisão.
-2. Se você já tiver a versão histórica com movimento, selecione-a antes de recompor. Quando o app comprovar que ela contém os mesmos componentes do ZIP, o par selecionado fica fora da recomposição nessa revisão.
-3. Toque em **Recompor pares desta página**. As cópias ficam no app até você aprovar **Publicar cópia**. A recomposição mantém a imagem e o vídeo originais, sem recodificar. Abra a cópia publicada e teste movimento e áudio na Galeria.
-4. Para revisar uma redundância, escolha primeiro a foto que deve permanecer. Depois escolha a recomposta, a estática ou o vídeo avulso que deseja comparar. Se o item estiver só na nuvem, use o download do próprio app de origem, quando disponível. O GalleryBridge compara o arquivo escolhido e nunca faz download em massa.
-5. Para um redundante exclusivamente local, confira os atributos e a reprodução da foto que permanece. Depois use **Mover para o álbum GalleryBridge_Revisao** quando o GalleryBridge tiver criado a cópia, ou solicite **Enviar redundante à lixeira**. O Android pede consentimento. A tela acompanha o resultado no aparelho e oferece restauração da última ação compatível.
-
-JPEG compatível pode ser recomposto. O GalleryBridge lê o formato Motion Photo JPEG com XMP e uma variante Samsung SEF de entrada única. HEIC, HDR com dados auxiliares e variantes que o app não consegue verificar ficam em revisão. As origens no Takeout são mantidas. As cópias temporárias e verificadas usam espaço no aparelho.
-
-Uma mídia sincronizada pode sumir do Google Fotos e de outros aparelhos quando for excluída. Use o caminho nativo da Galeria para itens na nuvem e preserve o item se houver dúvida sobre a associação. O app não trata a lixeira local como confirmação de exclusão na nuvem.
-
-Se você usa **DCIM/Archive** para o acervo consolidado, mantenha a organização separada da tela de revisão de duplicatas. Preserve **Restored** para downloads individuais e **Camera** para capturas. O feed reúne as mídias de várias pastas. Remover um álbum ainda preenchido pode remover as mídias que ele contém.
-
-
-## Sincronização, duplicatas e datas
-
-- Em **Avançado**, abra a Galeria para solicitar a sincronização nativa em Wi-Fi. Em perfis reconhecidos, o diagnóstico opcional mostra fila, tentativas agendadas, registros pendentes e o horário de sucesso observado. Para medir redução da fila ou comparar tentativas, faça uma segunda leitura depois de alguns minutos. Fila vazia e o fim do indicador de progresso não confirmam sincronização com o Google Fotos.
-- Em **Duplicatas**, selecione as fotos locais ou use as correspondências locais já registradas no catálogo. O GalleryBridge forma grupos de JPEGs estáticos com bytes idênticos, mantém uma cópia por grupo e protege favoritos. O app mostra até 48 cópias por aprovação. Confirme as versões e os álbuns antes de pedir o movimento para **Pictures/GalleryBridge_Revisao_Duplicatas**. O Android precisa permitir a escrita. Se o app fechar durante o movimento, confira o diário antes de repetir a seleção. A revisão não apaga arquivos nem decide se eles foram excluídos do Google Fotos.
-- Em **Datas**, escolha uma foto. O app mostra a data do arquivo e a do Takeout quando encontra a mesma mídia por conteúdo. Para JPEGs compatíveis, digite a data com o fuso e verifique a prévia antes de salvar uma cópia corrigida. O original permanece acessível. HEIC, Motion Photos e estruturas EXIF que não podem ser verificadas ficam em revisão.
