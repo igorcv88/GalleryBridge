@@ -2,8 +2,13 @@ name: Android CI
 on:
   push:
     branches: ['**']
-  pull_request:
   workflow_dispatch:
+
+# Superseded CI runs on the same branch must not consume runner time.
+concurrency:
+  group: gallerybridge-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
@@ -60,8 +65,8 @@ jobs:
           retention-days: 1
   signed-apk:
     needs: [host, instrumented]
-    # Pushes build the exact commit; external PRs run tests without signing secrets.
-    if: github.repository == 'igorcv88/GalleryBridge' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    # Only the canonical repository may use the production signing key.
+    if: github.repository == 'igorcv88/GalleryBridge'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

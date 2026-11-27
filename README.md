@@ -102,7 +102,7 @@ Local absence, a cache entry, or an empty queue does not establish remote deleti
 ## APKs, CI, and releases
 
 - [Releases](https://github.com/igorcv88/GalleryBridge/releases/latest): official signed APK and SHA-256 checksum when available.
-- [Actions](https://github.com/igorcv88/GalleryBridge/actions/workflows/android.yml): engine and app tests, lint, Detekt, builds, and instrumented API 30 and 37.0 tests. Internal branch pushes produce a signed APK after successful checks, with one-day artifact retention. External PRs do not receive signing secrets.
+- [Actions](https://github.com/igorcv88/GalleryBridge/actions/workflows/android.yml): engine and app tests, lint, Detekt, builds, and instrumented API 30 and 37.0 tests. Each branch push in this repository starts one CI run; newer pushes cancel superseded runs on the same branch. Manual CI runs are also supported. Successful internal runs produce a signed APK with one-day artifact retention. Fork PRs do not automatically trigger this workflow or receive signing secrets.
 - After a PR is merged into `main`, the release workflow repeats the checks and publishes directly to Releases. Stable releases use the moving `latest` tag. Apply the `release:prerelease` label before merging for a separate pre-release. The release workflow does not upload Actions artifacts.
 
 Official APK updates require the same signing key as the installed APK. Earlier experimental APKs may use a different key. Do not uninstall without preserving your data and catalog. See [CI and signing configuration](docs/ci-release.md).
