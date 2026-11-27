@@ -1,0 +1,78 @@
+{
+  "synthetic": true,
+  "notes": "Casos de classificação; todos os planos são read-only e não autorizam exclusão. Criar fixtures binárias reais nos testes do executor.",
+  "cases": [
+    {
+      "id": "MP01",
+      "scenario": "Identificador igual, par único, sem histórica",
+      "expected_decision": "COMPOSE",
+      "delete_authorized": false
+    },
+    {
+      "id": "MP02",
+      "scenario": "Nome igual sem ID",
+      "expected_decision": "HOLD",
+      "delete_authorized": false
+    },
+    {
+      "id": "MP03",
+      "scenario": "ID reutilizado em fotos diferentes",
+      "expected_decision": "HOLD",
+      "delete_authorized": false
+    },
+    {
+      "id": "MP04",
+      "scenario": "Motion histórica verificada still+vídeo e campos",
+      "expected_decision": "KEEP_HISTORICAL",
+      "delete_authorized": false
+    },
+    {
+      "id": "MP05",
+      "scenario": "Histórico só por soma de tamanhos",
+      "expected_decision": "HOLD",
+      "delete_authorized": false
+    },
+    {
+      "id": "MP06",
+      "scenario": "Still igual mas vídeo diferente",
+      "expected_decision": "KEEP_BOTH",
+      "delete_authorized": false
+    },
+    {
+      "id": "MP07",
+      "scenario": "Estática equivalente, motion válida, campos preservados",
+      "expected_decision": "REVIEW_STATIC",
+      "delete_authorized": false
+    },
+    {
+      "id": "MP08",
+      "scenario": "Estática favorita e motion não favorita, sem resolução",
+      "expected_decision": "HOLD",
+      "delete_authorized": false
+    },
+    {
+      "id": "MP09",
+      "scenario": "Vídeo componente com hash igual, relação provada",
+      "expected_decision": "REVIEW_VIDEO",
+      "delete_authorized": false
+    },
+    {
+      "id": "MP10",
+      "scenario": "Vídeo independente mesmo nome",
+      "expected_decision": "KEEP_BOTH",
+      "delete_authorized": false
+    },
+    {
+      "id": "MP11",
+      "scenario": "Histórico com aliases múltiplos",
+      "expected_decision": "HOLD",
+      "delete_authorized": false
+    },
+    {
+      "id": "MP12",
+      "scenario": "Motion nova única e validada",
+      "expected_decision": "KEEP_RECOMPOSED",
+      "delete_authorized": false
+    }
+  ]
+}

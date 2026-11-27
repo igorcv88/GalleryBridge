@@ -29,7 +29,7 @@ private val favoriteSidecars = """
 """.trimIndent()
 
 internal class Ledger(context: Context, name: String = "gallerybridge.db") : SQLiteOpenHelper(
-    context, name, null, 3
+    context, name, null, 5
 ) {
     init { setWriteAheadLoggingEnabled(true) }
 
@@ -69,12 +69,108 @@ internal class Ledger(context: Context, name: String = "gallerybridge.db") : SQL
         """.trimIndent())
         createReconciliationTables(db)
         createFavoriteEvidence(db)
+        createMotionTables(db)
+        createDuplicateTables(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        require(oldVersion in 1..2 && newVersion == 3)
+        require(oldVersion in 1..4 && newVersion == 5)
         if (oldVersion == 1) createReconciliationTables(db)
-        createFavoriteEvidence(db)
+        if (oldVersion <= 2) createFavoriteEvidence(db)
+        if (oldVersion <= 3) createMotionTables(db)
+        createDuplicateTables(db)
+    }
+
+    private fun createDuplicateTables(db: SQLiteDatabase) {
+        db.execSQL("""CREATE TABLE duplicate_operation(
+            uri TEXT PRIMARY KEY, plan TEXT NOT NULL, keeper TEXT NOT NULL, candidate TEXT NOT NULL,
+            state TEXT NOT NULL
+        )""".trimIndent())
+    }
+
+    fun duplicateCatalogTargets(): List<String> = readableDatabase.rawQuery("""
+        WITH known AS (
+            SELECT t.sha,t.uri FROM local_target t WHERE EXISTS (
+                SELECT 1 FROM entries e JOIN sources s ON s.id=e.source
+                WHERE e.sha=t.sha AND e.mime LIKE 'image/%' AND e.restricted=0 AND s.state='VERIFIED'
+            )
+            UNION
+            SELECT p.sha,p.uri FROM publication p
+            JOIN entries e ON e.source=p.source AND e.ordinal=p.ordinal
+            WHERE p.state='E1' AND p.uri IS NOT NULL AND e.mime LIKE 'image/%' AND e.restricted=0
+        ), indexed AS (
+            SELECT sha,uri FROM known WHERE NOT EXISTS (
+                SELECT 1 FROM duplicate_operation o WHERE o.uri=known.uri AND o.state='MOVED_LOCAL'
+            )
+        ), grouped AS (
+            SELECT sha FROM indexed GROUP BY sha HAVING count(*) > 1
+        )
+        SELECT DISTINCT i.uri FROM indexed i JOIN grouped g ON g.sha=i.sha ORDER BY i.uri LIMIT 1000
+    """.trimIndent(), null).use { rows -> buildList {
+        while (rows.moveToNext()) add(rows.getString(0))
+    } }
+
+    fun duplicateJobs(): List<DuplicateJob> = readableDatabase.rawQuery(
+        "SELECT uri,plan,keeper,candidate,state FROM duplicate_operation ORDER BY uri", null
+    ).use { rows ->
+        buildList {
+            while (rows.moveToNext()) add(DuplicateJob(rows.getString(0), rows.getString(1), rows.getString(2),
+                rows.getString(3), rows.getString(4)))
+        }
+    }
+
+    fun saveDuplicateJobs(items: List<DuplicateJob>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            items.forEach { job ->
+                db.execSQL("INSERT OR REPLACE INTO duplicate_operation VALUES(?,?,?,?,?)",
+                    arrayOf(job.uri, job.plan, job.keeper, job.candidate, job.state))
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    private fun createMotionTables(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE motion_publication(digest TEXT PRIMARY KEY, sha TEXT NOT NULL, uri TEXT, state TEXT NOT NULL)")
+        db.execSQL("""CREATE TABLE motion_operation(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, digest TEXT NOT NULL,
+            survivor TEXT NOT NULL, candidate TEXT NOT NULL, target_path TEXT, state TEXT NOT NULL,
+            UNIQUE(action,digest)
+        )""".trimIndent())
+    }
+
+    fun motionPublication(key: String): Pair<String?, String>? = readableDatabase.rawQuery(
+        "SELECT uri,state FROM motion_publication WHERE digest=?", arrayOf(key)
+    ).use { if (it.moveToFirst()) it.getString(0) to it.getString(1) else null }
+
+    fun isRecomposed(uri: String): Boolean = scalar(
+        "SELECT count(*) FROM motion_publication WHERE uri=? AND state='INDEXED_LOCAL'", arrayOf(uri)
+    ) == 1L
+
+    fun saveMotionPublication(key: String, sha: String, uri: String?, state: String) {
+        writableDatabase.execSQL("INSERT OR REPLACE INTO motion_publication VALUES(?,?,?,?)",
+            arrayOf(key, sha, uri, state))
+    }
+
+    fun motionOperation(): MotionOperation? = readableDatabase.rawQuery(
+        "SELECT action,digest,survivor,candidate,target_path,state FROM motion_operation ORDER BY id DESC LIMIT 1", null
+    ).use { if (it.moveToFirst()) MotionOperation(it.getString(0), it.getString(1),
+        it.getString(2), it.getString(3), it.getString(4), it.getString(5)) else null }
+
+    fun saveMotionOperation(op: MotionOperation) {
+        writableDatabase.execSQL("INSERT OR REPLACE INTO motion_operation(action,digest,survivor,candidate,target_path,state) VALUES(?,?,?,?,?,?)",
+            arrayOf(op.action, op.digest, op.survivor, op.candidate, op.targetPath, op.state))
+    }
+
+    fun protectedMotionSurvivor(uri: String, sha: String): Boolean = readableDatabase.rawQuery(
+        "SELECT DISTINCT survivor FROM motion_operation WHERE state IN ('REMOVAL_OBSERVED','MOVED_LOCAL','RESTORED_LOCAL')", null
+    ).use { rows ->
+        while (rows.moveToNext()) {
+            val saved = JSONObject(rows.getString(0))
+            if (saved.getString("uri") == uri && saved.getString("sha") == sha) return true
+        }
+        false
     }
 
     private fun createFavoriteEvidence(db: SQLiteDatabase) {
@@ -215,6 +311,26 @@ internal class Ledger(context: Context, name: String = "gallerybridge.db") : SQL
         WHERE e.sha=? AND e.restricted=0 AND s.state='VERIFIED' ORDER BY e.directory
     """.trimIndent(), arrayOf(sha)).use { row ->
         buildList { while (row.moveToNext()) add(row.getString(0)) }
+    }
+
+    fun motionGroups(limit: Int, offset: Int): List<List<MediaId>> = readableDatabase.rawQuery("""
+        WITH selected AS (
+            SELECT DISTINCT e.live_id FROM entries e JOIN sources s ON s.id=e.source
+            WHERE s.state='VERIFIED' AND e.live_id IS NOT NULL AND e.mime IS NOT NULL AND e.restricted=0
+            ORDER BY e.live_id LIMIT ? OFFSET ?
+        )
+        SELECT DISTINCT e.live_id,e.sha,e.mime LIKE 'video/%' FROM entries e
+        JOIN selected ON selected.live_id=e.live_id
+        JOIN sources s ON s.id=e.source AND s.state='VERIFIED'
+        WHERE e.mime IS NOT NULL
+        ORDER BY e.live_id,e.sha
+    """.trimIndent(), arrayOf(limit.toString(), offset.toString())).use { rows ->
+        val groups = linkedMapOf<String, MutableList<MediaId>>()
+        while (rows.moveToNext()) {
+            val id = rows.getString(0)
+            groups.getOrPut(id, ::mutableListOf).add(MediaId(rows.getString(1), rows.getInt(2) != 0, id))
+        }
+        groups.values.toList()
     }
 
     fun approvedVideo(sha: String): Boolean = scalar(

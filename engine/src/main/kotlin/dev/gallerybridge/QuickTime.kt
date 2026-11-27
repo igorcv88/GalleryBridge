@@ -11,7 +11,7 @@ private const val MAX_METADATA = 2 * 1024 * 1024
 fun inspectQuickTime(source: InputStream, size: Long): QuickTimeFacts {
     val input = DataInputStream(source)
     var keys: String? = null
-    var id: String? = null
+    val ids = mutableSetOf<String>()
     var container: TimeFact? = null
     fun inspect(length: Long, depth: Int) {
         atoms(input, length) { name, bytes ->
@@ -31,14 +31,14 @@ fun inspectQuickTime(source: InputStream, size: Long): QuickTimeFacts {
                     val data = input.readExact(bytes.toInt())
                     val tags = quickTimeTags(data, 0).ifEmpty { quickTimeTags(data, 4) }
                     tags["com.apple.quicktime.creationdate"]?.let { keys = it }
-                    tags["com.apple.quicktime.content.identifier"]?.let { id = it }
+                    tags["com.apple.quicktime.content.identifier"]?.let { ids.add(it) }
                 }
                 else -> skip(input, bytes)
             }
         }
     }
     inspect(size, 0)
-    return QuickTimeFacts(keys?.let { cameraTime(it, null, "Keys:CreationDate") }, container, normalizeLiveId(id))
+    return QuickTimeFacts(keys?.let { cameraTime(it, null, "Keys:CreationDate") }, container, ids.map { normalizeLiveId(it) }.distinct().singleOrNull())
 }
 
 private fun quickTimeTags(bytes: ByteArray, offset: Int): Map<String, String> = runCatching {
@@ -52,7 +52,12 @@ private fun quickTimeTags(bytes: ByteArray, offset: Int): Map<String, String> = 
             else -> skip(input, length)
         }
     }
-    names.mapIndexedNotNull { index, key -> values[index + 1]?.let { key to it } }.toMap()
+    names.mapIndexedNotNull { index, key -> values[index + 1]?.let { key to it } }
+        .groupBy({ it.first }, { it.second })
+        .mapValues { (key, entries) ->
+            if (key == "com.apple.quicktime.content.identifier" && entries.distinct().size > 1) ""
+            else entries.last()
+        }
 }.getOrDefault(emptyMap())
 
 private fun readKeys(bytes: ByteArray): List<String> {

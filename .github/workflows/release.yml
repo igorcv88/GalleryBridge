@@ -1,0 +1,75 @@
+name: Publish APK Release
+on:
+  pull_request_target:
+    branches: [main]
+    types: [closed]
+permissions:
+  contents: read
+jobs:
+  release:
+    if: github.event.pull_request.merged == true && github.repository == 'igorcv88/GalleryBridge'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: gallerybridge-release-main
+      cancel-in-progress: false
+    steps:
+      # Never check out the PR head. Only the commit already merged into main is trusted.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+      - name: Verify merged commit
+        env:
+          MERGED_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse HEAD)" = "$MERGED_SHA"
+          git merge-base --is-ancestor "$MERGED_SHA" origin/main
+      - uses: ./.github/actions/android-setup
+      - run: bash .github/scripts/check-android.sh
+      - run: |
+          mkdir -p android-build
+          cp -R app/build/outputs/apk/debug android-build/
+          mkdir -p android-build/androidTest
+          cp -R app/build/outputs/apk/androidTest/debug android-build/androidTest/
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Instrumentation API 30
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          system-image-api-level: '30'
+          arch: x86_64
+          target: default
+          disable-animations: true
+          script: bash .github/scripts/instrument-apks.sh
+      - name: Instrumentation API 37.0
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          system-image-api-level: '37.0'
+          arch: x86_64
+          target: default
+          disable-animations: true
+          script: bash .github/scripts/instrument-apks.sh
+      - name: Sign and verify APK
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: bash .github/scripts/build-signed-apk.sh
+      - name: Publish directly to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGED_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PRERELEASE: ${{ contains(github.event.pull_request.labels.*.name, 'release:prerelease') }}
+        run: bash .github/scripts/publish-release.sh
