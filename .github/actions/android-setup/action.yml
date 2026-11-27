@@ -9,7 +9,12 @@ runs:
         java-version: '21'
     - uses: gradle/actions/wrapper-validation@v4
     - uses: gradle/actions/setup-gradle@v4
+      with:
+        cache-read-only: false
     - shell: bash
       run: |
         set -euo pipefail
-        "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
+        # Hosted runners usually already have this SDK. Avoid unnecessary installs.
+        if [[ ! -f "$ANDROID_HOME/platforms/android-36/android.jar" || ! -x "$ANDROID_HOME/build-tools/36.0.0/apksigner" || ! -x "$ANDROID_HOME/build-tools/36.0.0/aapt" || ! -x "$ANDROID_HOME/build-tools/36.0.0/zipalign" ]]; then
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
+        fi

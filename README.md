@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/gallerybridge-banner.svg" alt="GalleryBridge — A sync helper for Google Photos and Samsung Gallery" width="100%" />
+  <img src=".github/assets/gallerybridge-banner.svg" alt="GalleryBridge — A bridge from Google Photos to Samsung Gallery." width="100%" />
 </p>
 
 <p align="center">
@@ -15,9 +15,15 @@
 
 # GalleryBridge
 
-**A sync helper for Google Photos and Samsung Gallery.**
+**Bring your entire Google Photos library into Samsung Gallery without having to rebuild it from scratch.**
 
-GalleryBridge inspects Google Takeout ZIP archives, identifies identical copies, and helps review dates, metadata, and favorites before migration. The main Android app runs on Android 10 or later without root. Sync with Google Photos is handled by Samsung Gallery on supported devices and accounts.
+GalleryBridge is an Android companion designed to assist users migrating their photo and video libraries from Google Photos to Samsung Gallery, with the goal of preserving original media, capture dates, favorites, location data, album organization, and motion content throughout the transition.
+
+Beyond the initial migration, GalleryBridge provides tools for maintaining and repairing your media library, including duplicate detection, metadata conflict resolution, Live Photo and Motion Photo reconstruction, incorrect date recovery, and Samsung MediaSync troubleshooting.
+
+GalleryBridge works alongside Samsung Gallery's native Google Photos synchronization, helping prepare, organize, verify, and maintain your library while leaving cloud synchronization to the native services.
+
+The main Android app runs on Android 10 or later without root. Native Google Photos synchronization requires a supported Samsung Gallery device and account.
 
 [Releases](https://github.com/igorcv88/GalleryBridge/releases) · [Issues](https://github.com/igorcv88/GalleryBridge/issues) · [License](LICENSE)
 
@@ -96,8 +102,8 @@ Local absence, a cache entry, or an empty queue does not establish remote deleti
 ## APKs, CI, and releases
 
 - [Releases](https://github.com/igorcv88/GalleryBridge/releases/latest): official signed APK and SHA-256 checksum when available.
-- [Actions](https://github.com/igorcv88/GalleryBridge/actions/workflows/android.yml): engine and app tests, lint, Detekt, builds, and instrumented API 30 and 37.0 tests. Internal branch pushes produce a signed APK after successful checks, with one-day artifact retention. External PRs do not receive signing secrets.
-- After a PR is merged into `main`, the release workflow repeats the checks and publishes directly to Releases. Stable releases use the moving `latest` tag. Apply the `release:prerelease` label before merging for a separate pre-release. The release workflow does not upload Actions artifacts.
+- [Actions](https://github.com/igorcv88/GalleryBridge/actions/workflows/android.yml): engine and app unit tests, Android lint, Detekt, and debug/release builds in one cached job. API 30 instrumentation is optional via Run workflow (instrumentation). Each branch push in this repository starts one CI run; newer pushes cancel superseded runs on the same branch. Manual CI runs are also supported. API 37.0 emulator boot is no longer a CI requirement. Successful internal runs produce a signed APK with one-day artifact retention. Fork PRs do not automatically trigger this workflow or receive signing secrets.
+- After a PR is merged into `main`, the release workflow repeats the cached unit tests, lint, Detekt and builds, verifies the APK signature, and publishes directly to Releases without emulator startup. Stable releases use the moving `latest` tag. Apply the `release:prerelease` label before merging for a separate pre-release. The release workflow does not upload Actions artifacts.
 
 Official APK updates require the same signing key as the installed APK. Earlier experimental APKs may use a different key. Do not uninstall without preserving your data and catalog. See [CI and signing configuration](docs/ci-release.md).
 

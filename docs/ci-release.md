@@ -1,26 +1,34 @@
-# CI, assinatura e publicação
+# CI, signing and releases
 
-## CI (Android CI)
+## Android CI
 
-O workflow `android.yml` dispara em todo push de branch (um run para o HEAD de cada push), em pull requests e por execução manual. O job host valida o wrapper, usa JDK 21, SDK/Build Tools 36, executa testes JVM de engine e app (debug e release), lint debug/release, Detekt e builds debug, androidTest e release. A matriz AOSP mantém API 30 e 37.0 do workflow anterior, reutilizando os APKs de instrumentação. A assinatura oficial só ocorre depois dos checks, em pushes do repositório e execução manual autorizada. PRs de forks executam os checks sem chave privada; PRs da própria origem têm APK oficial no run de push correspondente. Os APKs de instrumentação são exclusivamente de teste, assinados com chave debug. Não instalar como release.
+The single `android.yml` workflow runs once per branch push or manual dispatch. It does not duplicate runs via the pull_request event. Concurrency group `gallerybridge-ci-${{ github.ref }}` cancels superseded CI runs on the same branch without affecting other branches or release runs. Fork PRs do not automatically run this workflow or receive signing secrets; review external code before importing it to a trusted internal branch.
 
-Todos os uploads usam `retention-days: 1` (expiração de 24h gerenciada pelo GitHub; a remoção física e atualização de armazenamento são assíncronas). Os artefatos anteriores à mudança não têm a retenção retroativamente alterada. A publicação estável não usa upload-artifact.
+The normal CI consists of one runner and one Gradle invocation: wrapper validation, JDK 21, SDK/Build Tools 36, engine unit tests, app debug/release unit tests, Android lint for both variants, Detekt, debug APK and unsigned release APK. Gradle's setup action restores and saves caches on internal branches; `--build-cache --parallel` enables reusable task outputs and parallel project execution. No clean build, second release compilation, or intermediate APK artifact transfer is required. SDK packages are installed only when the required tools are absent.
 
-## Secrets
+The same runner signs the already-built release APK, verifies certificate SHA-256, package identity, version, APK signatures and checksum, and uploads the final APK and checksum with `retention-days: 1`. GitHub manages expiry; physical removal and storage accounting can lag. No intermediate debug APK artifacts are uploaded.
 
-Configure em Settings → Secrets and variables → Actions → New repository secret:
+### Optional device tests
 
-| Secret | Conteúdo |
+Use Actions → Android CI → Run workflow, enable `instrumentation`, and select a trusted branch to run the existing API 30 instrumented suite. It builds the instrumentation APK and starts one emulator on the same runner. The normal push CI and release do not launch emulators. API 37.0 was removed from the workflow after repeated emulator boot timeouts; this is not evidence that Android 17 is incompatible with the app. Local device tests remain available via `./gradlew :app:connectedDebugAndroidTest`. Unit tests do not substitute for physical Samsung Gallery/MediaSync validation.
+
+## Signing secrets
+
+Configure Settings → Secrets and variables → Actions:
+
+| Secret | Value |
 | --- | --- |
-| KEYSTORE_BASE64 | Arquivo JKS/PKCS12 codificado em base64 |
-| KEYSTORE_PASSWORD | Senha do keystore |
-| KEY_ALIAS | Alias da chave |
-| KEY_PASSWORD | Senha da chave |
+| KEYSTORE_BASE64 | Base64-encoded JKS/PKCS12 keystore |
+| KEYSTORE_PASSWORD | Keystore password |
+| KEY_ALIAS | Signing key alias |
+| KEY_PASSWORD | Signing key password |
 
-Mesmo contrato do WaEnhancerXCommunity. Não coloque valores em arquivos ou logs. O APK release sem assinatura é alinhado e assinado com apksigner; a validação compara SHA-256 do certificado extraído do keystore, pacote, versão e assinatura v2/v3. A chave temporária é removida no EXIT e não é armazenada no cache. Não há fallback para debug. Instalações antigas com outra chave não podem receber atualização direta.
+Same contract as WaEnhancerXCommunity. Secrets are only provided to the signing step. The unsigned release APK is aligned and signed with apksigner. The signing script verifies the certificate, application ID, version, v2/v3 signature and SHA-256 checksum; temporary key material is removed on exit and is not included in Gradle caches. There is no debug-key fallback. Older installations signed with another key cannot be updated in place.
 
 ## Release
 
-Somente PR fechado com merged=true em main. O evento pull_request_target fechado permite publicar inclusive PRs externos *já revisados e mesclados*. O workflow nunca executa o head do PR: faz checkout do merge_commit_sha e exige que seja ancestral de origin/main antes de rodar código. Mantém os checks host e a mesma matriz de instrumentação no próprio runner, sem artefatos Actions. Assina e publica APK e checksum em Releases. O label `release:prerelease` antes do merge produz uma tag exclusiva pre-prN-SHA, sem alterar latest. O padrão é uma release estável com tag móvel literal `latest` e marcada Latest. O workflow envia os novos assets antes de mover a tag com lease; depois limpa apenas os assets antigos gerados pelo mesmo padrão. Atualização de release/tag/assets não é transação atômica; em falha, inspecione Releases e reexecute o mesmo run. Releases imutáveis ou proteção que impeça atualizar a tag latest são incompatíveis com este modelo. O controle de concorrência serializa publicações e o script impede regressão de latest; o GitHub pode substituir runs pendentes quando vários merges ocorrem simultaneamente. A versão Android continua definida no Gradle; aumente versionCode para versões novas quando necessário.
+Only a merged PR into main triggers publication. The workflow checks out the exact merged commit and verifies that it is an ancestor of origin/main. It uses the same cached host checks and single build invocation, signs the existing APK, and publishes directly to GitHub Releases. No emulator or Actions artifact upload is involved. Release concurrency remains independent of CI, with `cancel-in-progress: false`; GitHub may still replace a pending run when multiple merges arrive simultaneously.
 
-O workflow só entra em operação após existir em main; o primeiro merge que o introduz pode exigir o próximo merge para iniciar a publicação. Não há dispatch manual de release nem trigger por tag ou push. Nenhuma publicação é feita por este PR de infraestrutura antes de chegar a main. Testes AOSP não certificam sincronização Samsung/Google Fotos.
+The `release:prerelease` label on a PR before merge selects a separate pre-prN-SHA tag without changing latest. Stable releases use the literal moving `latest` tag. New assets are uploaded before the tag is moved with a lease; older generated assets are removed afterward. Updates to tags and assets are not atomic. Immutable releases or protected tags may prevent this model. Android versionCode remains controlled by Gradle. A workflow introduced or changed by a merge may not be active for that merge itself. The next eligible merge uses the updated configuration.
+
+Neither successful JVM tests nor AOSP instrumentation establishes Samsung/Google Photos remote synchronization correctness.

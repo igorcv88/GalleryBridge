@@ -12,7 +12,7 @@
 | Conta revogada no Drive, morte real do processo em todas as janelas e export de centenas de GB | Cobertura parcial de código e fixtures simuladas. Testes reais pendentes |
 | Sync Samsung, exclusão sincronizada e Free up | Fluxo manual, condicionado à conta de teste e aparelho autorizado. A ausência local não é prova de exclusão remota |
 
-O workflow executa testes JVM, MediaStore instrumentado em API 30, lint, Detekt e conferência da assinatura. O PR inicial documenta as verificações pendentes. O comportamento do agente Samsung depende de validação separada.
+O workflow padrão executa testes JVM, lint, Detekt, builds e conferência da assinatura. Os testes instrumentados MediaStore em API 30 são executáveis sob demanda pela opção instrumentation da CI, ou localmente; não bloqueiam pushes e releases. O PR inicial documenta as verificações pendentes. O comportamento do agente Samsung depende de validação separada.
 
 ## Rodada 0.2
 

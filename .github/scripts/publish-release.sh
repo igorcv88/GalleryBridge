@@ -11,7 +11,7 @@ test -s "$apk" && test -s "$sum"
 (cd dist && sha256sum -c "$(basename "$sum")")
 notes="$(mktemp)"
 trap 'rm -f -- "$notes"' EXIT
-printf 'Commit: %s\n\nPR: #%s\n\nAPK assinado; testes JVM, lint, Detekt e instrumentação AOSP concluídos.\nConfira o arquivo SHA-256 antes da instalação.\n' "$sha" "$PR_NUMBER" > "$notes"
+printf 'Commit: %s\n\nPR: #%s\n\nSigned APK; JVM tests, Android lint, Detekt and builds passed.\nVerify the SHA-256 checksum before installing.\n' "$sha" "$PR_NUMBER" > "$notes"
 if [[ "$PRERELEASE" == true ]]; then
   tag="pre-pr$PR_NUMBER-$short"
   if gh release view "$tag" --json tagName >/dev/null 2>&1; then

@@ -9,6 +9,7 @@ jobs:
   release:
     if: github.event.pull_request.merged == true && github.repository == 'igorcv88/GalleryBridge'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: write
     concurrency:
@@ -29,35 +30,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$MERGED_SHA"
           git merge-base --is-ancestor "$MERGED_SHA" origin/main
       - uses: ./.github/actions/android-setup
-      - run: bash .github/scripts/check-android.sh
-      - run: |
-          mkdir -p android-build
-          cp -R app/build/outputs/apk/debug android-build/
-          mkdir -p android-build/androidTest
-          cp -R app/build/outputs/apk/androidTest/debug android-build/androidTest/
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Instrumentation API 30
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 36
-          system-image-api-level: '30'
-          arch: x86_64
-          target: default
-          disable-animations: true
-          script: bash .github/scripts/instrument-apks.sh
-      - name: Instrumentation API 37.0
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 36
-          system-image-api-level: '37.0'
-          arch: x86_64
-          target: default
-          disable-animations: true
-          script: bash .github/scripts/instrument-apks.sh
+      - name: Run unit tests, lint, Detekt and build APKs
+        run: bash .github/scripts/check-android.sh
       - name: Sign and verify APK
         shell: bash
         env:
