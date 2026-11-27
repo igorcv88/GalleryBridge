@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="520" viewBox="0 0 1600 520" role="img" aria-labelledby="title desc">
 <title id="title">GalleryBridge</title>
-<desc id="desc">Your bridge from Google Photos to Samsung Gallery. Android app for migration, metadata repair, duplicate review, and MediaSync troubleshooting.</desc>
+<desc id="desc">A bridge from Google Photos to Samsung Gallery. Android app for migration, metadata repair, duplicate review, and MediaSync troubleshooting.</desc>
 <defs>
 <clipPath id="markclip"><path d="M54,4 A50,50 0,1 1,54,104 A50,50 0,1 1,54,4 Z"/></clipPath>
 <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#04152D"/><stop offset=".65" stop-color="#071D35"/><stop offset="1" stop-color="#0A2B50"/></linearGradient>
@@ -20,7 +20,7 @@
 <g transform="translate(60 65) scale(3.6)"><g clip-path="url(#markclip)"><path fill="#00B85A" d="M54,4 A50,50 0,1 1,54,104 A50,50 0,1 1,54,4 Z"/><path fill="#FFC107" d="M54,54 C66,50 82,26 85,14 A50,50 0,0 1,104,54 C103,79 80,85 54,54 Z"/><path fill="#FF303B" d="M54,4 A50,50 0,0 1,85,14 C100,34 83,53 54,54 C65,34 65,18 54,4 Z"/><path fill="#087CF4" d="M54,4 C65,18 65,34 54,54 C43,74 48,94 68,102 L54,104 A50,50 0,0 1,54,4 Z"/><path fill="#80D7FA" d="M4,65 L23,44 Q28,39 33,44 L43,55 L47,51 Q51,47 56,52 L60,56 C45,76 24,76 10,82 Z"/><path fill="#DDF5FF" d="M4,65 L23,44 Q28,39 33,44 L47,59 C32,66 20,68 8,77 Z"/><path fill="#0656E8" d="M10,82 C24,69 44,70 54,54 C43,74 48,94 68,102 L54,104 A50,50 0,0 1,10,82 Z"/><path fill="#FFFFFF" d="M39,25 A8,8 0,1 1,39,41 A8,8 0,1 1,39,25 Z"/></g></g>
 <g font-family="Inter,Segoe UI,Arial,sans-serif">
 <text x="480" y="200" font-size="94" font-weight="800" letter-spacing="-3" fill="#F8FAFC">Gallery<tspan fill="url(#accent)">Bridge</tspan></text>
-<text x="485" y="269" font-size="35" font-weight="500" fill="#F1F5F9">Your bridge from Google Photos to Samsung Gallery.</text>
+<text x="485" y="269" font-size="35" font-weight="500" fill="#F1F5F9">A bridge from Google Photos to Samsung Gallery.</text>
 <rect x="485" y="303" width="630" height="4" rx="2" fill="url(#line)"/>
 <text x="485" y="356" font-size="28" fill="#C2D3E6">Android app for migration, metadata repair, duplicate review,</text>
 <text x="485" y="393" font-size="28" fill="#C2D3E6">and MediaSync troubleshooting.</text>

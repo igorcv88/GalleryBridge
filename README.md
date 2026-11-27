@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/gallerybridge-banner.svg" alt="GalleryBridge — Your bridge from Google Photos to Samsung Gallery." width="100%" />
+  <img src=".github/assets/gallerybridge-banner.svg" alt="GalleryBridge — A bridge from Google Photos to Samsung Gallery." width="100%" />
 </p>
 
 <p align="center">
