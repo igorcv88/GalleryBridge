@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/gallerybridge-banner.svg" alt="GalleryBridge — A sync helper for Google Photos and Samsung Gallery" width="100%" />
+  <img src=".github/assets/gallerybridge-banner.svg" alt="GalleryBridge — Your bridge from Google Photos to Samsung Gallery." width="100%" />
 </p>
 
 <p align="center">
@@ -15,9 +15,15 @@
 
 # GalleryBridge
 
-**A sync helper for Google Photos and Samsung Gallery.**
+**Bring your entire Google Photos library into Samsung Gallery without having to rebuild it from scratch.**
 
-GalleryBridge inspects Google Takeout ZIP archives, identifies identical copies, and helps review dates, metadata, and favorites before migration. The main Android app runs on Android 10 or later without root. Sync with Google Photos is handled by Samsung Gallery on supported devices and accounts.
+GalleryBridge is an Android companion designed to assist users migrating their photo and video libraries from Google Photos to Samsung Gallery, with the goal of preserving original media, capture dates, favorites, location data, album organization, and motion content throughout the transition.
+
+Beyond the initial migration, GalleryBridge provides tools for maintaining and repairing your media library, including duplicate detection, metadata conflict resolution, Live Photo and Motion Photo reconstruction, incorrect date recovery, and Samsung MediaSync troubleshooting.
+
+GalleryBridge works alongside Samsung Gallery's native Google Photos synchronization, helping prepare, organize, verify, and maintain your library while leaving cloud synchronization to the native services.
+
+The main Android app runs on Android 10 or later without root. Native Google Photos synchronization requires a supported Samsung Gallery device and account.
 
 [Releases](https://github.com/igorcv88/GalleryBridge/releases) · [Issues](https://github.com/igorcv88/GalleryBridge/issues) · [License](LICENSE)
 
