@@ -1,0 +1,14 @@
+complexity:
+  active: false
+style:
+  active: false
+naming:
+  FunctionNaming:
+    ignoreAnnotated: [Composable]
+  MatchingDeclarationName:
+    active: false
+exceptions:
+  TooGenericExceptionCaught:
+    active: false
+  TooGenericExceptionThrown:
+    active: false

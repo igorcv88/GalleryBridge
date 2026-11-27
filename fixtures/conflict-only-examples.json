@@ -1,0 +1,9 @@
+{
+  "cases": [
+    {"id": "no_conflict", "media_type": "mp4", "existing_date": "2022-08-09T17:01:18Z", "keys_creation_date": "2022-08-09T20:01:18+03:00", "should_write": false, "reason": "same instant"},
+    {"id": "confirmed_live_photo_conflict", "media_type": "mp4", "existing_date": "2019-10-24T01:14:15Z", "keys_creation_date": "2019-10-22T17:41:46-03:00", "associated_photo_exif": "2019-10-22T17:41:47.272-03:00", "live_identifier_verified": false, "should_write": false, "proposed_action": "REVIEW_AND_HOLD_PAIR", "reason": "known date divergence but content pairing and write path unresolved"},
+    {"id": "exif_without_offset", "media_type": "heic", "exif_datetime_original": "2018:05:28 14:20:00", "should_write": false, "reason": "local wall time cannot be treated as UTC without evidence"},
+    {"id": "same_filename_different_sha", "media_type": "jpg", "same_name_count": 2, "content_sha_match": false, "should_deduplicate": false},
+    {"id": "favorite_cloud_only", "source_wanted_favorite": true, "media_store_uri_available": false, "write_capability": "UNSUPPORTED", "should_write": false}
+  ]
+}

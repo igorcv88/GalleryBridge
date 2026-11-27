@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/gallerybridge/metadata-decision.schema.json",
+  "title": "MetadataDecision",
+  "description": "Decision applies to proven conflicts only; explicit capabilities and user consent required for writes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision_id", "media_sha256", "field", "scope", "action", "source_preference", "evidence", "write_capability", "approved"],
+  "properties": {
+    "decision_id": {"type": "string", "minLength": 1},
+    "media_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "field": {"enum": ["capture_time", "location", "favorite", "description", "album", "orientation", "edit_variant"]},
+    "scope": {"enum": ["individual_conflict", "similar_conflicts_only"]},
+    "action": {"enum": ["KEEP_DESTINATION", "USE_TAKEOUT", "USE_FILE_METADATA", "NO_CHANGE", "REVIEW", "REPORT_ONLY", "UNSUPPORTED"]},
+    "source_preference": {"type": "string", "description": "Original raw tag identity, e.g. Keys:CreationDate or ExifIFD:DateTimeOriginal"},
+    "evidence": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["source", "value", "confidence"], "properties": {"source": {"type": "string"}, "value": {}, "confidence": {"enum": ["LOW", "MEDIUM", "HIGH", "UNKNOWN"]}, "time_basis": {"enum": ["OFFSET_AWARE", "LOCAL_WALL_TIME", "NOT_APPLICABLE", "UNKNOWN"]}}}},
+    "write_capability": {"enum": ["SUPPORTED_WITH_CONSENT", "READ_ONLY", "UNSUPPORTED", "UNKNOWN"]},
+    "approved": {"type": "boolean", "description": "False by default; true must be set by explicit informed user action"},
+    "applied_at": {"type": ["string", "null"], "format": "date-time"},
+    "verified_at": {"type": ["string", "null"], "format": "date-time"}
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/gallerybridge/sync-evidence.schema.json",
+  "title": "SyncEvidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["media_sha256", "level", "state", "observed_at", "source", "identity_confidence", "notes"],
+  "properties": {
+    "media_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "level": {"enum": ["E0_SOURCE_HASH", "E1_STAGED_MEDIASTORE", "E2_SAMSUNG_LINKED_CLEAN", "E3_USER_ATTESTED", "E4_CLOUD_REMOTE_VERIFIED"]},
+    "state": {"enum": ["VERIFIED", "INFERRED", "PENDING", "UNRESOLVED", "UNKNOWN", "UNSUPPORTED"]},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "source": {"type": "string", "description": "e.g. MediaStore, SamsungSDK_readonly, user_review, TakeoutZip"},
+    "identity_confidence": {"enum": ["EXACT_SHA", "MATCHED_PATH_AND_ID", "HEURISTIC", "UNKNOWN"]},
+    "notes": {"type": "string"},
+    "provider_version": {"type": ["string", "null"]},
+    "queue_scope": {"enum": ["CURRENT_BATCH", "VERIFIED_EXTERNAL", "UNKNOWN", "NONE"]}
+  }
+}
